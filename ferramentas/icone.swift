@@ -98,14 +98,14 @@ func fundo(_ caminho: String, _ e: CGFloat) {
         let ponta = NSBezierPath()
         ponta.move(to: NSPoint(x: 400 * e, y: y)); ponta.line(to: NSPoint(x: 378 * e, y: y + 16 * e)); ponta.line(to: NSPoint(x: 378 * e, y: y - 16 * e)); ponta.close()
         azulForte.setFill(); ponta.fill()
-        let caixa = NSRect(x: 24 * e, y: (H - 408) * e, width: (W - 48) * e, height: 160 * e)
+        let caixa = NSRect(x: 24 * e, y: (H - 418) * e, width: (W - 48) * e, height: 170 * e)
         cor(1, 0.96, 0.86).setFill(); NSBezierPath(roundedRect: caixa, xRadius: 14 * e, yRadius: 14 * e).fill()
         cor(0.93, 0.78, 0.45).setStroke(); let borda = NSBezierPath(roundedRect: caixa, xRadius: 14 * e, yRadius: 14 * e); borda.lineWidth = 1.5 * e; borda.stroke()
         let marrom = cor(0.3, 0.22, 0.05), titulo = cor(0.42, 0.28, 0.02)
         let blocos: [(String, String)] = [
-            ("Na primeira vez", "O Mac avisa que não conhece o app: clique em “Concluído”. Depois abra Ajustes do Sistema › Privacidade e Segurança e clique em “Abrir Mesmo Assim”."),
-            ("First time", "macOS says it can't verify the app: click “Done”. Then open System Settings › Privacy & Security and click “Open Anyway”."),
-            ("Primera vez", "macOS avisa que no puede verificar la app: cierra el aviso. Luego abre Ajustes del Sistema › Privacidad y seguridad y haz clic en “Abrir igualmente”."),
+            ("Na primeira vez", "O Mac avisa que não conhece o app: clique em “OK” (nunca em “Mover para o Lixo”). Depois abra Ajustes do Sistema › Privacidade e Segurança e clique em “Abrir Mesmo Assim”."),
+            ("First time", "macOS says it can't verify the app: click “OK” or “Done” (never “Move to Trash”). Then open System Settings › Privacy & Security and click “Open Anyway”."),
+            ("Primera vez", "macOS avisa que no puede verificar la app: haz clic en “OK” (nunca en “Trasladar a la Papelera”). Luego abre Ajustes del Sistema › Privacidad y seguridad y haz clic en “Abrir igualmente”."),
         ]
         // desenha de cima para baixo, cada bloco logo abaixo do anterior
         var topo = (H - 258) * e
