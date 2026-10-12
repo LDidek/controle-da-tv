@@ -14,7 +14,8 @@ html = f'''<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Termos de Uso · Controle da TV</title>
+<title>Termos de Uso · Terms of Use · Términos de uso · Controle da TV</title>
+<meta name="description" content="Termos de uso do Controle da TV, projeto independente e sem vínculo com a LG. Terms of use of Controle da TV, an independent project not affiliated with LG. Términos de uso de Controle da TV.">
 <link rel="icon" type="image/png" href="/icone.png">
 <script>
   // Idioma: escolha feita pela pessoa (botão) > ?lang= > idiomas do navegador > inglês.

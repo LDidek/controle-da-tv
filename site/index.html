@@ -3,9 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Controle da TV</title>
-<meta name="description" content="Controle remoto da TV LG (webOS) na barra de menus do Mac. Gratuito e de código aberto. · Remote control for LG webOS TVs in the Mac menu bar. Free and open source.">
+<title>Controle da TV · controle remoto da TV LG pelo Mac, fácil para idosos</title>
+<meta name="description" content="App gratuito para Mac que liga, desliga e controla a TV LG (webOS): volume, entradas, Netflix, YouTube e Globoplay. Configuração passo a passo com letras grandes, pensada para idosos. Código aberto, em português, inglês e espanhol.">
 <link rel="icon" type="image/png" href="/icone.png">
+<!--SEO-->
 <script>
   // Idioma: escolha feita pela pessoa (botão) > ?lang= > idiomas do navegador > inglês.
   // Roda antes de a página aparecer, para não piscar em outro idioma.
@@ -48,6 +49,9 @@
   .idiomas { display: flex; justify-content: flex-end; gap: 6px; margin-bottom: 18px; }
   .idiomas button { font: inherit; font-size: 15px; background: var(--cartao); color: var(--texto); border: 1px solid var(--borda);
                     border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+  .idiomas a { font-size: 15px; background: var(--cartao); color: var(--texto); border: 1px solid var(--borda);
+               border-radius: 999px; padding: 6px 14px; text-decoration: none; }
+  .idiomas a.atual { background: var(--azul); color: var(--sobre-azul); border-color: var(--azul); font-weight: 700; }
   .idiomas button[aria-pressed="true"] { background: var(--azul); color: var(--sobre-azul); border-color: var(--azul); font-weight: 700; }
   header { display: flex; gap: 20px; align-items: center; margin-bottom: 26px; }
   header img { width: 96px; height: 96px; flex: none; }
@@ -77,6 +81,9 @@
              padding: 16px; display: flex; justify-content: center; }
   .desenho svg { max-width: 100%; height: auto; }
   .caminho { display: inline-block; background: var(--azul-claro); border-radius: 8px; padding: 2px 10px; font-weight: 600; }
+  .faq details { margin: 0 0 10px; }
+  .faq summary { font-weight: 600; }
+  .faq p { margin: 10px 0 0; }
   details { margin-top: 14px; background: var(--cartao); border: 1px solid var(--borda); border-radius: 16px; padding: 16px 20px; }
   summary { cursor: pointer; font-weight: 700; }
   pre { background: #0f1720; color: #e6edf6; padding: 14px 16px; border-radius: 12px; overflow-x: auto; font-size: 15px; white-space: pre-wrap; word-break: break-all; }
@@ -122,6 +129,20 @@
     <div class="cartao">
       <p>Um aplicativo pequeno para Mac que transforma o computador num controle remoto da TV LG da casa. Ele fica no alto da tela, perto do relógio, e conversa com a TV pela rede Wi-Fi de casa: sem cabos, sem conta e sem nuvem.</p>
       <p>Foi feito para quem tem pouca familiaridade com tecnologia: a primeira configuração é um passo a passo com desenhos, um passo por tela, e depois ele se atualiza sozinho.</p>
+    </div>
+
+    <h2>Feito para idosos</h2>
+    <div class="cartao">
+      <p>Pensado para quem tem pouca prática com tecnologia e para os filhos e netos que configuram para eles:</p>
+      <ul class="lista">
+        <li>Letras grandes e uma coisa por tela, sem pressa.</li>
+        <li>A configuração explica cada passo com desenhos e nunca muda de tela sozinha.</li>
+        <li>Clique duplo ou tecla errada não pulam etapas.</li>
+        <li>Desligar a TV pede confirmação, para não apagar sem querer.</li>
+        <li>Sem conta, sem senha e sem cadastro.</li>
+        <li>Atualiza sozinho e, se alguma permissão sumir, avisa e mostra como corrigir.</li>
+        <li>Mostra o nome de quem ajuda: “Ficou com dúvida? É só chamar…”.</li>
+      </ul>
     </div>
 
     <h2>Para que serve</h2>
@@ -196,6 +217,18 @@
       <p>O comando baixa a versão mais nova, confere o arquivo e a assinatura, coloca o app em Aplicativos e abre a configuração.</p>
     </details>
 
+    <h2>Perguntas frequentes</h2>
+    <div class="faq">
+      <details><summary>Como controlar a TV LG pelo Mac?</summary><p>Instale o Controle da TV, um app gratuito para Mac. Ele encontra a TV LG na rede Wi-Fi de casa e, depois de você aceitar uma vez o pedido de conexão na tela da TV, liga, desliga, muda o volume, troca a entrada e abre os aplicativos pela barra de menus.</p></details>
+      <details><summary>Existe um controle remoto de TV LG mais fácil para idosos?</summary><p>Sim. O Controle da TV foi feito para isso: letras grandes, configuração calma com desenhos, sem conta e sem senha. Um filho ou neto instala e deixa tudo pronto; depois o app abre sozinho quando o Mac liga e se atualiza sozinho.</p></details>
+      <details><summary>Funciona com qual TV LG?</summary><p>Com TVs LG com sistema webOS, em geral as smart TVs da LG desde 2014. Foi testado com a LG 50UK6510PSF (2018, webOS 4.4). TVs de outras marcas não funcionam.</p></details>
+      <details><summary>Dá para ligar a TV LG pelo computador?</summary><p>Sim. O app liga a TV por Wake-on-LAN, um sinal enviado pela rede. Na TV, deixe ativas as opções LG Connect Apps, Mobile TV On (Ligar via Wi-Fi) e Início Rápido+.</p></details>
+      <details><summary>Precisa de internet, conta ou assinatura?</summary><p>Não precisa de conta nem de assinatura, e o app é gratuito. A internet só é usada para baixar os componentes na primeira vez, procurar atualizações e fazer buscas no YouTube. O controle da TV acontece dentro da rede de casa.</p></details>
+      <details><summary>Dá para usar pelo celular?</summary><p>Sim. Com o Mac ligado, qualquer celular na mesma rede Wi-Fi abre a página de controle no navegador, com botões grandes.</p></details>
+      <details><summary>O Controle da TV é da LG?</summary><p>Não. É um projeto independente e de código aberto, sem nenhum vínculo com a LG Electronics.</p></details>
+      <details><summary>Funciona em Windows ou em Mac com Intel?</summary><p>Não. Precisa de um Mac com chip Apple (M1 ou mais novo) e macOS 14 ou mais novo.</p></details>
+    </div>
+
     <h2>Código aberto</h2>
     <div class="cartao">
       <p>O Controle da TV é um projeto pessoal, gratuito e de código aberto, com licença MIT. O código está no GitHub: <a href="{{REPO}}">{{REPO}}</a>.</p>
@@ -209,6 +242,20 @@
     <div class="cartao">
       <p>A small Mac app that turns your computer into a remote control for the LG TV at home. It sits at the top of the screen, next to the clock, and talks to the TV over your home Wi-Fi: no cables, no account and no cloud.</p>
       <p>It was made for people who aren't comfortable with technology: the first setup is a step-by-step guide with drawings, one step per screen, and after that it updates itself.</p>
+    </div>
+
+    <h2>Made for older adults</h2>
+    <div class="cartao">
+      <p>Designed for people who aren't comfortable with technology, and for the children and grandchildren who set it up for them:</p>
+      <ul class="lista">
+        <li>Large text and one thing per screen, no rush.</li>
+        <li>The setup explains each step with drawings and never changes screens by itself.</li>
+        <li>A double-click or a stray key won't skip a step.</li>
+        <li>Turning the TV off asks for confirmation, so it doesn't go off by accident.</li>
+        <li>No account, no password, no sign-up.</li>
+        <li>It updates itself and, if a permission goes missing, says so and shows how to fix it.</li>
+        <li>It shows who to call for help: “Stuck? Just ask…”.</li>
+      </ul>
     </div>
 
     <h2>What it does</h2>
@@ -283,6 +330,18 @@
       <p>It downloads the latest version, checks the file and its signature, puts the app in Applications and opens the setup.</p>
     </details>
 
+    <h2>Frequently asked questions</h2>
+    <div class="faq">
+      <details><summary>How do I control an LG TV from a Mac?</summary><p>Install Controle da TV, a free Mac app. It finds the LG TV on your home Wi-Fi and, after you accept the connection request on the TV screen once, it turns the TV on and off, changes the volume, switches inputs and opens apps from the menu bar.</p></details>
+      <details><summary>Is there an easier LG TV remote for elderly people?</summary><p>Yes. Controle da TV was made for that: large text, a calm step-by-step setup with drawings, no account and no password. A son, daughter or grandchild installs it and leaves everything ready; then it opens by itself when the Mac starts and updates itself.</p></details>
+      <details><summary>Which LG TVs does it work with?</summary><p>LG TVs running webOS, generally LG smart TVs from 2014 onward. It was tested with the LG 50UK6510PSF (2018, webOS 4.4). TVs from other brands don't work.</p></details>
+      <details><summary>Can I turn on an LG TV from my computer?</summary><p>Yes. The app turns the TV on with Wake-on-LAN, a signal sent over the network. On the TV, keep LG Connect Apps, Mobile TV On (Turn on via Wi-Fi) and Quick Start+ enabled.</p></details>
+      <details><summary>Does it need internet, an account or a subscription?</summary><p>No account and no subscription, and the app is free. The internet is only used to download components the first time, check for updates and run YouTube searches. Controlling the TV happens inside your home network.</p></details>
+      <details><summary>Can I use it from my phone?</summary><p>Yes. With the Mac on, any phone on the same Wi-Fi can open the remote control page in its browser, with large buttons.</p></details>
+      <details><summary>Is Controle da TV made by LG?</summary><p>No. It's an independent, open-source project with no affiliation with LG Electronics.</p></details>
+      <details><summary>Does it work on Windows or Intel Macs?</summary><p>No. It needs a Mac with Apple silicon (M1 or newer) and macOS 14 or newer.</p></details>
+    </div>
+
     <h2>Open source</h2>
     <div class="cartao">
       <p>Controle da TV is a free, personal, open-source project under the MIT license. The code is on GitHub: <a href="{{REPO}}">{{REPO}}</a>.</p>
@@ -296,6 +355,20 @@
     <div class="cartao">
       <p>Una pequeña app para Mac que convierte la computadora en un control remoto de la TV LG de la casa. Vive arriba en la pantalla, junto al reloj, y habla con la TV por el Wi-Fi de casa: sin cables, sin cuenta y sin nube.</p>
       <p>Está pensada para quien no se lleva bien con la tecnología: la primera configuración es una guía paso a paso con dibujos, un paso por pantalla, y después se actualiza sola.</p>
+    </div>
+
+    <h2>Hecho para personas mayores</h2>
+    <div class="cartao">
+      <p>Pensado para quien tiene poca práctica con la tecnología y para los hijos y nietos que se lo configuran:</p>
+      <ul class="lista">
+        <li>Letras grandes y una cosa por pantalla, sin prisa.</li>
+        <li>La configuración explica cada paso con dibujos y nunca cambia de pantalla sola.</li>
+        <li>Un doble clic o una tecla equivocada no saltan pasos.</li>
+        <li>Apagar la TV pide confirmación, para que no se apague sin querer.</li>
+        <li>Sin cuenta, sin contraseña y sin registro.</li>
+        <li>Se actualiza sola y, si falta algún permiso, avisa y muestra cómo arreglarlo.</li>
+        <li>Muestra a quién llamar: “¿Tienes dudas? Solo llama a…”.</li>
+      </ul>
     </div>
 
     <h2>Para qué sirve</h2>
@@ -370,6 +443,18 @@
       <p>Descarga la versión más nueva, verifica el archivo y la firma, pone la app en Aplicaciones y abre la configuración.</p>
     </details>
 
+    <h2>Preguntas frecuentes</h2>
+    <div class="faq">
+      <details><summary>¿Cómo controlar la TV LG desde el Mac?</summary><p>Instala Controle da TV, una app gratuita para Mac. Encuentra la TV LG en el Wi-Fi de casa y, después de aceptar una vez la solicitud de conexión en la pantalla de la TV, la enciende, la apaga, cambia el volumen, cambia la entrada y abre las apps desde la barra de menús.</p></details>
+      <details><summary>¿Hay un control remoto de TV LG más fácil para personas mayores?</summary><p>Sí. Controle da TV se hizo para eso: letras grandes, configuración tranquila con dibujos, sin cuenta y sin contraseña. Un hijo o nieto lo instala y deja todo listo; después la app se abre sola al encender el Mac y se actualiza sola.</p></details>
+      <details><summary>¿Con qué TV LG funciona?</summary><p>Con TVs LG con sistema webOS, en general las smart TV de LG desde 2014. Se probó con la LG 50UK6510PSF (2018, webOS 4.4). Las TVs de otras marcas no funcionan.</p></details>
+      <details><summary>¿Se puede encender la TV LG desde la computadora?</summary><p>Sí. La app enciende la TV con Wake-on-LAN, una señal enviada por la red. En la TV, deja activadas las opciones LG Connect Apps, Mobile TV On (Encender por Wi-Fi) e Inicio rápido+.</p></details>
+      <details><summary>¿Necesita internet, cuenta o suscripción?</summary><p>No necesita cuenta ni suscripción, y la app es gratuita. Internet solo se usa para descargar los componentes la primera vez, buscar actualizaciones y hacer búsquedas en YouTube. El control de la TV ocurre dentro de la red de casa.</p></details>
+      <details><summary>¿Se puede usar desde el teléfono?</summary><p>Sí. Con el Mac encendido, cualquier teléfono en el mismo Wi-Fi abre la página de control en el navegador, con botones grandes.</p></details>
+      <details><summary>¿Controle da TV es de LG?</summary><p>No. Es un proyecto independiente y de código abierto, sin ningún vínculo con LG Electronics.</p></details>
+      <details><summary>¿Funciona en Windows o en Mac con Intel?</summary><p>No. Necesita un Mac con chip de Apple (M1 o más nuevo) y macOS 14 o más nuevo.</p></details>
+    </div>
+
     <h2>Código abierto</h2>
     <div class="cartao">
       <p>Controle da TV es un proyecto personal, gratuito y de código abierto, con licencia MIT. El código está en GitHub: <a href="{{REPO}}">{{REPO}}</a>.</p>
@@ -379,6 +464,7 @@
 
   <footer>
     <p>Controle da TV · {{VERSAO}} · <a href="{{REPO}}">GitHub</a> · <a href="/termos" data-termos>Termos de Uso</a></p>
+    <p><a href="/pt/" hreflang="pt-BR">Português</a> · <a href="/en/" hreflang="en">English</a> · <a href="/es/" hreflang="es">Español</a></p>
     <p data-lang="pt">Projeto independente, sem vínculo com a LG Electronics.</p>
     <p data-lang="en">Independent project, not affiliated with LG Electronics.</p>
     <p data-lang="es">Proyecto independiente, sin vínculo con LG Electronics.</p>

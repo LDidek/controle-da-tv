@@ -81,7 +81,11 @@ trocar site/instalar.sh "$PUB/instalar.sh"
 cp site/404.html site/_headers "$PUB/"
 uv run -q --no-project --with markdown python -I ferramentas/termos-html.py TERMOS.md "$REPO" "$PUB/termos.html"
 sips -z 256 256 "$SAIDA/icone-1024.png" --out "$PUB/icone.png" >/dev/null
-if grep -l "{{" "$PUB"/*.html "$PUB"/instalar.sh; then echo "sobrou {{campo}} sem valor"; exit 1; fi
+"$SAIDA/icone" compartilhar "$PUB/og.png" "$SAIDA/icone-1024.png"
+# SEO e GEO: páginas /pt/ /en/ /es/, dados estruturados, sitemap, robots.txt e llms.txt
+uv run -q --no-project --with beautifulsoup4 python -I ferramentas/site-seo.py "$PUB" "$SITE" "$NOVA" "$REPO" "${AUTOR:-Controle da TV}" "$TAM_DMG"
+[ -n "$INDEXNOW" ] && printf '%s' "$INDEXNOW" > "$PUB/$INDEXNOW.txt"
+if grep -l "{{" "$PUB"/*.html "$PUB"/*/index.html "$PUB"/instalar.sh "$PUB"/llms.txt; then echo "sobrou {{campo}} sem valor"; exit 1; fi
 
 # Worker só com arquivos estáticos, no domínio do SITE
 cat > "$SAIDA/wrangler.toml" <<TOML
@@ -117,8 +121,15 @@ for _ in $(seq 1 20); do
   [ "$V" = "$BUILD" ] && break; sleep 3
 done
 [ "$V" = "$BUILD" ] || { echo "versao.json ainda não mostra a compilação $BUILD"; exit 1; }
-for caminho in "/" "/termos" "/$ZIP" "/ControleDaTV.dmg" "/instalar.sh" "/icone.png"; do
+for caminho in "/" "/pt/" "/en/" "/es/" "/termos" "/sitemap.xml" "/robots.txt" "/llms.txt" "/og.png" "/$ZIP" "/ControleDaTV.dmg" "/instalar.sh" "/icone.png"; do
   echo "$(curl -s ${RESOLVE[@]+"${RESOLVE[@]}"} -o /dev/null -w '%{http_code}' "$SITE$caminho") $caminho"
 done
 echo "$(curl -s ${RESOLVE[@]+"${RESOLVE[@]}"} -o /dev/null -w '%{http_code}' "$SITE/nao-existe") /nao-existe (tem que ser 404)"
+# avisa os buscadores (Bing, Yandex, Seznam, Naver…) que as páginas mudaram
+if [ -n "$INDEXNOW" ]; then
+  CORPO=$(printf '{"host":"%s","key":"%s","keyLocation":"%s/%s.txt","urlList":["%s/","%s/pt/","%s/en/","%s/es/","%s/termos","%s/llms.txt"]}' \
+    "$DOMINIO" "$INDEXNOW" "$SITE" "$INDEXNOW" "$SITE" "$SITE" "$SITE" "$SITE" "$SITE" "$SITE")
+  echo "IndexNow: $(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json; charset=utf-8' \
+    --data "$CORPO" https://api.indexnow.org/indexnow) (200/202 = recebido)"
+fi
 echo "ok: $NOVA publicada em $SITE"

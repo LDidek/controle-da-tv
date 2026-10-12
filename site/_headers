@@ -7,11 +7,15 @@
 /instalar.sh
   Cache-Control: no-cache
   Content-Type: text/plain; charset=utf-8
+/llms.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: public, max-age=3600
+/robots.txt
+  Content-Type: text/plain; charset=utf-8
 /*.zip
   Cache-Control: public, max-age=31536000, immutable
 /
-  Cache-Control: no-cache
+  Cache-Control: public, max-age=300
 /*
   X-Content-Type-Options: nosniff
-  Referrer-Policy: no-referrer
-  X-Robots-Tag: noindex
+  Referrer-Policy: strict-origin-when-cross-origin

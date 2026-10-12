@@ -22,3 +22,7 @@ REPO="https://github.com/LDidek/controle-da-tv"
 # Publicação na Cloudflare (Worker só com arquivos estáticos e domínio próprio).
 CLOUDFLARE_CONTA="id-da-conta"
 WORKER="controle-da-tv"
+
+# Opcional: chave do IndexNow (32 letras/números à sua escolha; fica pública em <site>/<chave>.txt).
+# Com ela, cada publicação avisa Bing e outros buscadores das páginas novas.
+INDEXNOW=""

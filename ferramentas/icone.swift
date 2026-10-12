@@ -118,7 +118,27 @@ func fundo(_ caminho: String, _ e: CGFloat) {
     gravar(rep, caminho)
 }
 
+/// Imagem de compartilhamento (1200 x 630) para WhatsApp, redes e buscadores.
+func compartilhar(_ caminho: String, icone: String) {
+    let rep = tela(1200, 630) { _ in
+        NSGradient(colors: [cor(0.13, 0.15, 0.19), cor(0.05, 0.055, 0.07)])!.draw(in: NSRect(x: 0, y: 0, width: 1200, height: 630), angle: -90)
+        NSGradient(colors: [azul.withAlphaComponent(0.35), azulForte.withAlphaComponent(0)])!
+            .draw(fromCenter: NSPoint(x: 290, y: 315), radius: 0, toCenter: NSPoint(x: 290, y: 315), radius: 360, options: [])
+        if let img = NSImage(contentsOfFile: icone) { img.draw(in: NSRect(x: 80, y: 105, width: 420, height: 420)) }
+        func linha(_ t: String, _ tam: CGFloat, _ peso: NSFont.Weight, _ c: NSColor, _ y: CGFloat) {
+            NSAttributedString(string: t, attributes: [.font: NSFont.systemFont(ofSize: tam, weight: peso), .foregroundColor: c])
+                .draw(with: NSRect(x: 540, y: y, width: 620, height: tam * 2.4), options: [.usesLineFragmentOrigin])
+        }
+        linha("Controle da TV", 72, .bold, .white, 345)
+        linha("Controle remoto da TV LG pelo Mac, fácil para idosos.", 36, .medium, cor(0.88, 0.91, 0.96), 250)
+        linha("LG TV remote for Mac · Control remoto de la TV LG", 26, .regular, azul, 175)
+        linha("Gratuito · código aberto · PT · EN · ES", 24, .regular, cor(0.6, 0.65, 0.72), 120)
+    }
+    gravar(rep, caminho)
+}
+
 switch a.count > 1 ? a[1] : "" {
+case "compartilhar": compartilhar(a[2], icone: a[3])
 case "icone": icone(a[2])
 case "fundo": fundo(a[2], CGFloat(Double(a[3]) ?? 1))
 default: print("uso: icone <png> | fundo <png> <escala>")
