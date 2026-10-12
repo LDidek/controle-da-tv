@@ -1,0 +1,858 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TV">
+<meta name="theme-color" content="#0e1014">
+<title>Controle da TV</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230e1014'/%3E%3Crect x='12' y='16' width='40' height='26' rx='4' fill='none' stroke='%23e8eaed' stroke-width='4'/%3E%3Cpath d='M24 50h16' stroke='%23e8eaed' stroke-width='4' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #0e1014;
+  --surface: #171a20;
+  --surface-2: #20242c;
+  --surface-3: #2a2f39;
+  --line: #2c313b;
+  --text: #e8eaed;
+  --muted: #9097a3;
+  --accent: #6e9bff;
+  --accent-ink: #0b1220;
+  --on: #3ecf8e;
+  --off: #ef5350;
+  --radius: 18px;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f2f3f5;
+    --surface: #ffffff;
+    --surface-2: #eef0f3;
+    --surface-3: #e2e5ea;
+    --line: #dde1e7;
+    --text: #15181d;
+    --muted: #5f6672;
+    --accent: #2f6bff;
+    --accent-ink: #ffffff;
+    --on: #1a9b63;
+    --off: #d93a37;
+    color-scheme: light;
+  }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; }
+html { touch-action: manipulation; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+button, input { touch-action: manipulation; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  min-height: 100vh;
+  -webkit-user-select: none; user-select: none;
+}
+button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; }
+button:disabled { cursor: default; }
+svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+header {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 16px; background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.status { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.on { background: var(--on); }
+.dot.wait { background: var(--accent); animation: pulso 1s infinite alternate; }
+@keyframes pulso { from { opacity: 1 } to { opacity: .3 } }
+.titulo { font-weight: 650; font-size: 17px; }
+.sub { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.power {
+  width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--surface-2); color: var(--muted);
+}
+.power.on { background: var(--off); color: #fff; }
+.power.off { background: var(--on); color: #fff; }
+
+main {
+  max-width: 980px; margin: 0 auto; padding: 16px;
+  display: grid; gap: 16px;
+}
+@media (min-width: 820px) {
+  main { grid-template-columns: 360px 1fr; align-items: start; }
+  .remoto { position: sticky; top: 92px; }
+}
+.col { display: grid; gap: 16px; min-width: 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+h2 { margin: 0 0 12px; font-size: 13px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+
+/* desligada */
+.aviso-off { display: none; text-align: center; padding: 28px 16px; }
+body.offline .aviso-off { display: block; }
+.aviso-off p { margin: 0 0 16px; color: var(--muted); }
+.btn-ligar {
+  display: inline-flex; align-items: center; gap: 10px; padding: 14px 28px; border-radius: 999px;
+  background: var(--on); color: #fff; font-weight: 650; font-size: 16px;
+}
+body.offline .controle { opacity: .35; pointer-events: none; }
+
+/* d-pad */
+.pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; max-width: 280px; margin: 0 auto; aspect-ratio: 1; }
+.pad button {
+  border-radius: 16px; background: var(--surface-2); display: grid; place-items: center;
+  transition: transform .08s, background .15s;
+}
+.pad .ok { background: var(--accent); color: var(--accent-ink); border-radius: 50%; font-weight: 700; font-size: 16px; }
+.pad .vazio { visibility: hidden; }
+.linha { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.chave {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 6px;
+  border-radius: 14px; background: var(--surface-2); font-size: 12px; color: var(--muted);
+}
+.chave svg { color: var(--text); }
+button:active:not(:disabled) { transform: scale(.94); }
+.pad button:active, .chave:active, .redondo:active { background: var(--surface-3); }
+.pad .ok:active { filter: brightness(1.15); background: var(--accent); }
+
+/* volume */
+.vol { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 12px; }
+.redondo { width: 44px; height: 44px; border-radius: 50%; background: var(--surface-2); display: grid; place-items: center; }
+.redondo.ativo { background: var(--off); color: #fff; }
+.vol-topo { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.vol-topo h2 { margin: 0; }
+.vol-num { font-variant-numeric: tabular-nums; font-weight: 650; font-size: 20px; }
+input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; border-radius: 3px; background: var(--surface-3); outline: none; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); border: 3px solid var(--surface); }
+input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); border: 3px solid var(--surface); }
+.mudo-linha { display: flex; justify-content: center; margin-top: 12px; }
+.pilula { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 999px; background: var(--surface-2); font-size: 14px; }
+.pilula.ativo { background: var(--off); color: #fff; }
+
+/* mídia e canal */
+.midia { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.midia button { height: 48px; border-radius: 14px; background: var(--surface-2); display: grid; place-items: center; }
+.canal { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center; margin-top: 12px; }
+.canal button { height: 44px; border-radius: 14px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 14px; }
+.canal span { color: var(--muted); font-size: 13px; min-width: 64px; text-align: center; }
+
+/* entradas */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px; border-radius: 999px;
+  background: var(--surface-2); font-size: 14px; border: 1px solid transparent;
+}
+.chip .mini { width: 7px; height: 7px; border-radius: 50%; background: var(--on); }
+.chip.atual { border-color: var(--accent); color: var(--accent); }
+.chip.apagado { color: var(--muted); }
+
+/* apps */
+.apps { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 10px; }
+.app {
+  display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 10px 6px 12px;
+  border-radius: 16px; background: var(--surface-2); border: 2px solid transparent; min-width: 0;
+}
+.app.atual { border-color: var(--accent); }
+.app .icone {
+  width: 100%; max-width: 76px; aspect-ratio: 1; border-radius: 16px; overflow: hidden;
+  display: grid; place-items: center; background: var(--surface-3); font-weight: 700; font-size: 20px;
+}
+.app img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.app .nome { font-size: 12px; text-align: center; line-height: 1.25; width: 100%; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+details > summary { list-style: none; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+details > summary::-webkit-details-marker { display: none; }
+details > summary h2 { margin: 0; }
+details[open] > summary { margin-bottom: 12px; }
+details > summary svg { transition: transform .2s; color: var(--muted); }
+details[open] > summary svg { transform: rotate(180deg); }
+
+/* teclado */
+.campo {
+  width: 100%; font: inherit; font-size: 17px; color: var(--text); background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; outline: none;
+  -webkit-user-select: text; user-select: text;
+}
+.campo:focus { border-color: var(--accent); }
+.teclado-acoes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.teclado-acoes button { height: 44px; border-radius: 14px; background: var(--surface-2); font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.teclado-acoes .principal { background: var(--accent); color: var(--accent-ink); font-weight: 650; }
+.nota { color: var(--muted); font-size: 12px; margin: 10px 0 0; }
+
+/* youtube */
+.resultados { display: grid; gap: 10px; margin-top: 12px; }
+.resultados:empty { display: none; }
+.video {
+  display: grid; grid-template-columns: 128px 1fr; gap: 12px; align-items: start; text-align: left;
+  padding: 6px; border-radius: 14px; background: var(--surface-2);
+}
+.video .capa { position: relative; width: 128px; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: var(--surface-3); }
+.video .capa img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.video .tempo {
+  position: absolute; right: 4px; bottom: 4px; padding: 1px 5px; border-radius: 4px;
+  background: #000; color: #fff; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.video .tempo.vivo { background: #cc0000; }
+.video .info { min-width: 0; padding-top: 2px; }
+.video .tit { font-size: 14px; line-height: 1.3; font-weight: 550; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.video .canal-yt { color: var(--muted); font-size: 12px; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.carregando { color: var(--muted); font-size: 14px; text-align: center; padding: 12px; }
+
+#toast {
+  position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translate(-50%, 20px);
+  background: var(--text); color: var(--bg); padding: 10px 18px; border-radius: 999px; font-size: 14px;
+  opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; max-width: calc(100% - 32px); text-align: center;
+}
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+.dica { color: var(--muted); font-size: 12px; text-align: center; margin: 4px 0 0; }
+@media (hover: none) { .dica { display: none; } }
+</style>
+</head>
+<body class="offline">
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-power" viewBox="0 0 24 24"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><path d="M12 2v10"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-mute" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="m23 9-6 6M17 9l6 6"/></symbol>
+  <symbol id="i-som" viewBox="0 0 24 24"><path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="m7 4 13 8-13 8z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 4h3v16H7zM14 4h3v16h-3z"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></symbol>
+  <symbol id="i-rew" viewBox="0 0 24 24"><path d="m11 19-9-7 9-7zM22 19l-9-7 9-7z"/></symbol>
+  <symbol id="i-ff" viewBox="0 0 24 24"><path d="m13 19 9-7-9-7zM2 19l9-7-9-7z"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-enter" viewBox="0 0 24 24"><path d="M9 10 4 15l5 5"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/></symbol>
+  <symbol id="i-del" viewBox="0 0 24 24"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><path d="m18 9-6 6M12 9l6 6"/></symbol>
+</svg>
+
+<header>
+  <div class="status">
+    <span class="dot" id="dot"></span>
+    <div style="min-width:0">
+      <div class="titulo">TV LG</div>
+      <div class="sub" id="sub">Conectando…</div>
+    </div>
+  </div>
+  <button class="power" id="power" aria-label="Ligar ou desligar"><svg><use href="#i-power"/></svg></button>
+</header>
+
+<main>
+  <section class="col remoto">
+    <div class="card aviso-off">
+      <p id="msg-off">A TV está desligada.</p>
+      <button class="btn-ligar" id="ligar"><svg><use href="#i-power"/></svg>Ligar a TV</button>
+    </div>
+
+    <div class="card controle">
+      <div class="pad">
+        <span class="vazio"></span>
+        <button data-botao="UP" aria-label="Cima"><svg><use href="#i-up"/></svg></button>
+        <span class="vazio"></span>
+        <button data-botao="LEFT" aria-label="Esquerda"><svg><use href="#i-left"/></svg></button>
+        <button data-botao="ENTER" class="ok">OK</button>
+        <button data-botao="RIGHT" aria-label="Direita"><svg><use href="#i-right"/></svg></button>
+        <span class="vazio"></span>
+        <button data-botao="DOWN" aria-label="Baixo"><svg><use href="#i-down"/></svg></button>
+        <span class="vazio"></span>
+      </div>
+      <div class="linha">
+        <button class="chave" data-botao="BACK"><svg><use href="#i-back"/></svg>Voltar</button>
+        <button class="chave" data-botao="HOME"><svg><use href="#i-home"/></svg>Início</button>
+        <button class="chave" data-botao="MENU"><svg><use href="#i-menu"/></svg>Ajustes</button>
+      </div>
+      <p class="dica">No teclado: setas, Enter, Esc (voltar), H (início), + / − (volume), M (mudo)</p>
+    </div>
+
+    <div class="card controle">
+      <h2>Escrever na TV</h2>
+      <form id="form-texto" autocomplete="off">
+        <input class="campo" id="texto" type="text" inputmode="text" enterkeyhint="search"
+               autocapitalize="none" autocorrect="off" spellcheck="false"
+               placeholder="Digite aqui: aparece na TV">
+      </form>
+      <div class="teclado-acoes">
+        <button id="limpar"><svg><use href="#i-del"/></svg>Limpar</button>
+        <button id="enviar-enter" class="principal"><svg><use href="#i-enter"/></svg>Buscar / Enter</button>
+      </div>
+      <p class="nota">Para campos que abrem o teclado da LG (navegador e alguns apps). O YouTube tem teclado próprio: use "Buscar no YouTube".</p>
+    </div>
+
+    <div class="card controle">
+      <div class="vol-topo"><h2>Volume</h2><span class="vol-num" id="vol-num">–</span></div>
+      <div class="vol">
+        <button class="redondo" data-acao="volume_menos" aria-label="Diminuir volume"><svg><use href="#i-minus"/></svg></button>
+        <input type="range" id="vol" min="0" max="100" step="1" value="0" aria-label="Volume">
+        <button class="redondo" data-acao="volume_mais" aria-label="Aumentar volume"><svg><use href="#i-plus"/></svg></button>
+      </div>
+      <div class="mudo-linha">
+        <button class="pilula" id="mudo" data-acao="mudo"><svg><use href="#i-som"/></svg><span>Som ligado</span></button>
+      </div>
+    </div>
+
+    <div class="card controle">
+      <h2>Reprodução</h2>
+      <div class="midia">
+        <button data-acao="rewind" aria-label="Voltar"><svg><use href="#i-rew"/></svg></button>
+        <button data-acao="play" aria-label="Play"><svg><use href="#i-play"/></svg></button>
+        <button data-acao="pause" aria-label="Pausar"><svg><use href="#i-pause"/></svg></button>
+        <button data-acao="stop" aria-label="Parar"><svg><use href="#i-stop"/></svg></button>
+        <button data-acao="fast_forward" aria-label="Avançar"><svg><use href="#i-ff"/></svg></button>
+      </div>
+      <div class="canal">
+        <button data-acao="canal_menos"><svg><use href="#i-minus"/></svg>Canal</button>
+        <span id="canal">–</span>
+        <button data-acao="canal_mais"><svg><use href="#i-plus"/></svg>Canal</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="col conteudo">
+    <div class="card controle">
+      <h2>Buscar no YouTube</h2>
+      <form id="form-yt" autocomplete="off">
+        <input class="campo" id="busca-yt" type="search" enterkeyhint="search"
+               autocapitalize="none" autocorrect="off" spellcheck="false"
+               placeholder="O que você quer ver?">
+      </form>
+      <div class="resultados" id="resultados-yt"></div>
+    </div>
+    <div class="card controle">
+      <h2>Entradas</h2>
+      <div class="chips" id="entradas"></div>
+    </div>
+    <div class="card controle">
+      <h2>Apps</h2>
+      <div class="apps" id="apps"></div>
+    </div>
+    <details class="card controle">
+      <summary><h2>Apps do sistema</h2><svg><use href="#i-chev"/></svg></summary>
+      <div class="apps" id="apps-sistema"></div>
+    </details>
+  </section>
+</main>
+
+<div id="toast" role="status"></div>
+
+<script>
+// Idioma: segue o do aparelho (português, espanhol; o resto vê em inglês). O texto em português é a chave.
+const IDIOMA = (() => {
+  for (const c of (navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || ""])) {
+    const l = String(c).toLowerCase();
+    if (l.startsWith("pt")) return "pt";
+    if (l.startsWith("es")) return "es";
+    if (l.startsWith("en")) return "en";
+  }
+  return "en";
+})();
+const TXT = {
+"Conectando…": [
+"Connecting…",
+"Conectando…"
+],
+"A TV está desligada.": [
+"The TV is off.",
+"La TV está apagada."
+],
+"Ligar a TV": [
+"Turn on the TV",
+"Encender la TV"
+],
+"Voltar": [
+"Back",
+"Atrás"
+],
+"Início": [
+"Home",
+"Inicio"
+],
+"Ajustes": [
+"Settings",
+"Ajustes"
+],
+"No teclado: setas, Enter, Esc (voltar), H (início), + / − (volume), M (mudo)": [
+"Keyboard: arrows, Enter, Esc (back), H (home), + / − (volume), M (mute)",
+"Teclado: flechas, Enter, Esc (atrás), H (inicio), + / − (volumen), M (silencio)"
+],
+"Escrever na TV": [
+"Type on the TV",
+"Escribir en la TV"
+],
+"Digite aqui: aparece na TV": [
+"Type here: it shows up on the TV",
+"Escribe aquí: aparece en la TV"
+],
+"Limpar": [
+"Clear",
+"Borrar"
+],
+"Buscar / Enter": [
+"Search / Enter",
+"Buscar / Enter"
+],
+"Para campos que abrem o teclado da LG (navegador e alguns apps). O YouTube tem teclado próprio: use \"Buscar no YouTube\".": [
+"For fields that open the LG keyboard (browser and some apps). YouTube has its own keyboard: use \"Search YouTube\".",
+"Para campos que abren el teclado de LG (navegador y algunas apps). YouTube tiene su propio teclado: usa \"Buscar en YouTube\"."
+],
+"Volume": [
+"Volume",
+"Volumen"
+],
+"Som ligado": [
+"Sound on",
+"Sonido activado"
+],
+"Mudo": [
+"Muted",
+"Silencio"
+],
+"Reprodução": [
+"Playback",
+"Reproducción"
+],
+"Canal": [
+"Channel",
+"Canal"
+],
+"Buscar no YouTube": [
+"Search YouTube",
+"Buscar en YouTube"
+],
+"O que você quer ver?": [
+"What do you want to watch?",
+"¿Qué quieres ver?"
+],
+"Entradas": [
+"Inputs",
+"Entradas"
+],
+"Apps": [
+"Apps",
+"Apps"
+],
+"Apps do sistema": [
+"System apps",
+"Apps del sistema"
+],
+"Ligar ou desligar": [
+"Turn on or off",
+"Encender o apagar"
+],
+"Cima": [
+"Up",
+"Arriba"
+],
+"Esquerda": [
+"Left",
+"Izquierda"
+],
+"Direita": [
+"Right",
+"Derecha"
+],
+"Baixo": [
+"Down",
+"Abajo"
+],
+"Diminuir volume": [
+"Volume down",
+"Bajar volumen"
+],
+"Aumentar volume": [
+"Volume up",
+"Subir volumen"
+],
+"Play": [
+"Play",
+"Reproducir"
+],
+"Pausar": [
+"Pause",
+"Pausar"
+],
+"Parar": [
+"Stop",
+"Detener"
+],
+"Avançar": [
+"Forward",
+"Adelantar"
+],
+"Não funcionou, tenta de novo": [
+"That didn't work, try again",
+"No funcionó, inténtalo de nuevo"
+],
+"Sem conexão com o Mac": [
+"No connection to the Mac",
+"Sin conexión con el Mac"
+],
+"TV ao vivo": [
+"Live TV",
+"TV en vivo"
+],
+"Nada conectado nesta entrada": [
+"Nothing connected to this input",
+"Nada conectado en esta entrada"
+],
+"Ligando…": [
+"Turning on…",
+"Encendiendo…"
+],
+"Desligada": [
+"Off",
+"Apagada"
+],
+"Não consegui falar com o Mac. Ele precisa estar ligado e na mesma rede.": [
+"I couldn't reach the Mac. It must be on and on the same network.",
+"No pude hablar con el Mac. Tiene que estar encendido y en la misma red."
+],
+"Ligando a TV, só um instante…": [
+"Turning on the TV, just a moment…",
+"Encendiendo la TV, un momento…"
+],
+"Ligada · ": [
+"On · ",
+"Encendida · "
+],
+"Desligar a TV?": [
+"Turn off the TV?",
+"¿Apagar la TV?"
+],
+"A TV não recebeu o texto": [
+"The TV didn't get the text",
+"La TV no recibió el texto"
+],
+"AO VIVO": [
+"LIVE",
+"EN VIVO"
+],
+"Abrindo no YouTube da TV": [
+"Opening on the TV's YouTube",
+"Abriendo en el YouTube de la TV"
+],
+"Buscando…": [
+"Searching…",
+"Buscando…"
+],
+"Nada encontrado.": [
+"Nothing found.",
+"No se encontró nada."
+],
+"A busca falhou. Tenta de novo.": [
+"The search failed. Try again.",
+"La búsqueda falló. Inténtalo de nuevo."
+]
+};
+const tr = (pt) => IDIOMA === "pt" ? pt : ((TXT[pt] || [])[IDIOMA === "en" ? 0 : 1] || pt);
+(function traduzirPagina() {
+  if (IDIOMA === "pt") return;
+  document.documentElement.lang = IDIOMA;
+  const andar = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let n = andar.nextNode(); n; n = andar.nextNode()) {
+    const chave = n.nodeValue.trim();
+    if (chave && TXT[chave]) n.nodeValue = n.nodeValue.replace(chave, tr(chave));
+  }
+  document.querySelectorAll("[placeholder],[aria-label],[title]").forEach((el) => {
+    for (const a of ["placeholder", "aria-label", "title"]) { const v = el.getAttribute(a); if (v && TXT[v]) el.setAttribute(a, tr(v)); }
+  });
+})();
+const $ = (s) => document.querySelector(s);
+const LIVE_TV = "com.webos.app.livetv";
+const PRIMEIROS = ["netflix", "youtube.leanback.v4", "globoplaywebos", "amazon", "com.disney.disneyplus-prod", "com.wbd.stream"];
+const ordem = (id) => { const i = PRIMEIROS.indexOf(id); return i < 0 ? PRIMEIROS.length : i; };
+const nomeCurto = (t) => t.split(/ [:–-] /)[0];
+let estado = null;
+let chaveApps = "";
+let arrastando = false;
+let pendente = 0;
+
+function toast(texto) {
+  const t = $("#toast");
+  t.textContent = texto;
+  t.classList.add("show");
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+async function carregar() {
+  try {
+    const r = await fetch("/api/estado", { cache: "no-store" });
+    estado = await r.json();
+  } catch {
+    estado = { online: false, semServidor: true };
+  }
+  render();
+}
+
+async function enviar(acao, valor) {
+  if (navigator.vibrate) navigator.vibrate(8);
+  pendente++;
+  try {
+    const r = await fetch("/api/acao", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ acao, valor }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok) toast(tr(j.erro || "Não funcionou, tenta de novo"));
+  } catch {
+    toast(tr("Sem conexão com o Mac"));
+  } finally {
+    pendente--;
+  }
+  setTimeout(carregar, acao === "desligar" ? 1500 : 350);
+}
+
+function iniciais(titulo) {
+  return titulo.replace(/[^A-Za-zÀ-ú0-9 ]/g, "").split(" ").filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
+}
+
+function cartaoApp(app) {
+  const b = document.createElement("button");
+  b.className = "app";
+  b.dataset.id = app.id;
+  const ic = document.createElement("div");
+  ic.className = "icone";
+  if (app.cor) ic.style.background = app.cor;
+  const img = document.createElement("img");
+  img.loading = "lazy";
+  img.alt = "";
+  img.src = "/icone/" + encodeURIComponent(app.id);
+  // fundo branco quando o ícone carrega: os transparentes (AirPlay = desenho preto) sumiam no fundo escuro
+  img.onload = () => { ic.style.background = "#fff"; };
+  img.onerror = () => { img.remove(); ic.textContent = iniciais(app.titulo); };
+  ic.appendChild(img);
+  const nome = document.createElement("div");
+  nome.className = "nome";
+  nome.textContent = app.titulo;
+  b.append(ic, nome);
+  b.addEventListener("click", () => { toast("Abrindo " + app.titulo); enviar("app", app.id); });
+  return b;
+}
+
+function renderApps() {
+  const chave = estado.apps.map((a) => a.id).join("|");
+  if (chave === chaveApps) return;
+  chaveApps = chave;
+  const principais = $("#apps"), sistema = $("#apps-sistema");
+  principais.replaceChildren();
+  sistema.replaceChildren();
+  const lista = [...estado.apps].sort((a, b) => ordem(a.id) - ordem(b.id));
+  for (const app of lista) {
+    if (app.id === LIVE_TV) continue;
+    app.titulo = nomeCurto(app.titulo);
+    (app.sistema ? sistema : principais).appendChild(cartaoApp(app));
+  }
+}
+
+function renderEntradas() {
+  const box = $("#entradas");
+  box.replaceChildren();
+  const itens = [{ id: LIVE_TV, nome: tr("TV ao vivo"), conectado: true, app: LIVE_TV, ehApp: true }, ...estado.entradas];
+  for (const e of itens) {
+    const b = document.createElement("button");
+    b.className = "chip" + (e.app === estado.app_atual ? " atual" : "") + (e.conectado ? "" : " apagado");
+    if (e.conectado && !e.ehApp) {
+      const m = document.createElement("span");
+      m.className = "mini";
+      b.appendChild(m);
+    }
+    b.append(e.nome);
+    b.title = e.conectado ? "" : tr("Nada conectado nesta entrada");
+    b.addEventListener("click", () => { toast(e.nome); e.ehApp ? enviar("app", e.id) : enviar("entrada", e.id); });
+    box.appendChild(b);
+  }
+}
+
+function render() {
+  const online = estado && estado.online;
+  document.body.classList.toggle("offline", !online);
+  const dot = $("#dot"), sub = $("#sub"), power = $("#power");
+  power.classList.remove("on", "off");
+  if (!online) {
+    const ligando = estado && estado.ligando;
+    dot.className = "dot" + (ligando ? " wait" : "");
+    sub.textContent = tr(estado && estado.semServidor ? "Sem conexão com o Mac" : ligando ? "Ligando…" : "Desligada");
+    $("#msg-off").textContent = tr(estado && estado.semServidor
+      ? "Não consegui falar com o Mac. Ele precisa estar ligado e na mesma rede."
+      : ligando ? "Ligando a TV, só um instante…" : "A TV está desligada.");
+    $("#ligar").disabled = !!(ligando || (estado && estado.semServidor));
+    power.classList.add("off");
+    power.setAttribute("aria-label", "Ligar");
+    return;
+  }
+  dot.className = "dot on";
+  sub.textContent = tr("Ligada · ") + (estado.app_titulo || "");
+  power.classList.add("on");
+  power.setAttribute("aria-label", "Desligar");
+
+  if (!arrastando) $("#vol").value = estado.volume ?? 0;
+  $("#vol-num").textContent = estado.volume ?? "–";
+  const mudo = $("#mudo");
+  mudo.classList.toggle("ativo", estado.mudo);
+  mudo.querySelector("use").setAttribute("href", estado.mudo ? "#i-mute" : "#i-som");
+  mudo.querySelector("span").textContent = tr(estado.mudo ? "Mudo" : "Som ligado");
+  $("#canal").textContent = estado.app_atual === LIVE_TV && estado.canal ? estado.canal : "–";
+
+  renderEntradas();
+  renderApps();
+  document.querySelectorAll(".app").forEach((el) => el.classList.toggle("atual", el.dataset.id === estado.app_atual));
+}
+
+document.querySelectorAll("[data-botao]").forEach((b) => b.addEventListener("click", () => enviar("botao", b.dataset.botao)));
+document.querySelectorAll("[data-acao]").forEach((b) => b.addEventListener("click", () => enviar(b.dataset.acao)));
+$("#ligar").addEventListener("click", () => { toast("Ligando a TV…"); enviar("ligar"); estado = { online: false, ligando: true }; render(); });
+$("#power").addEventListener("click", () => {
+  if (estado && estado.online) {
+    if (confirm(tr("Desligar a TV?"))) enviar("desligar");
+  } else {
+    $("#ligar").click();
+  }
+});
+const vol = $("#vol");
+vol.addEventListener("input", () => { arrastando = true; $("#vol-num").textContent = vol.value; });
+vol.addEventListener("change", () => { arrastando = false; enviar("volume", Number(vol.value)); });
+
+// ---- escrever na TV: espelha o campo (apaga só o que mudou e insere o resto) ----
+const campo = $("#texto");
+let naTv = "";          // o que achamos que está no campo da TV
+let fila = Promise.resolve();
+let timerTexto = null;
+let compondo = false;
+const chars = (s) => Array.from(s.normalize("NFC"));
+
+function naFila(acao, valor) {
+  fila = fila.then(async () => {
+    const r = await fetch("/api/acao", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ acao, valor }),
+    }).catch(() => null);
+    const j = r ? await r.json().catch(() => ({})) : {};
+    if (!r || !r.ok || !j.ok) { toast(tr(j.erro || "A TV não recebeu o texto")); throw new Error("falhou"); }
+  }).catch(() => { naTv = ""; });
+  return fila;
+}
+
+function sincronizar() {
+  const novo = chars(campo.value), velho = chars(naTv);
+  let comum = 0;
+  while (comum < novo.length && comum < velho.length && novo[comum] === velho[comum]) comum++;
+  const apagar = velho.length - comum;
+  const inserir = novo.slice(comum).join("");
+  if (apagar > 0) naFila("apagar", apagar);
+  if (inserir) naFila("texto", inserir);
+  naTv = novo.join("");
+}
+
+campo.addEventListener("compositionstart", () => { compondo = true; });
+campo.addEventListener("compositionend", () => { compondo = false; sincronizar(); });
+campo.addEventListener("input", () => {
+  if (compondo) return;
+  clearTimeout(timerTexto);
+  timerTexto = setTimeout(sincronizar, 120);
+});
+function enterNaTv() {
+  clearTimeout(timerTexto);
+  sincronizar();
+  naFila("enter");
+  campo.value = "";
+  naTv = "";
+}
+$("#form-texto").addEventListener("submit", (e) => { e.preventDefault(); enterNaTv(); campo.blur(); });
+$("#enviar-enter").addEventListener("click", enterNaTv);
+$("#limpar").addEventListener("click", () => {
+  clearTimeout(timerTexto);
+  naFila("apagar", 200);  // apaga o campo da TV inteiro, inclusive o que já estava lá
+  campo.value = "";
+  naTv = "";
+  campo.focus();
+});
+
+// ---- buscar no YouTube: a busca roda no Mac; a TV recebe só o vídeo escolhido ----
+const buscaYt = $("#busca-yt");
+const resultadosYt = $("#resultados-yt");
+const tempo = (s) => {
+  if (!s) return "";
+  s = Math.round(s);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), seg = String(s % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${seg}` : `${m}:${seg}`;
+};
+
+function cartaoVideo(v) {
+  const b = document.createElement("button");
+  b.className = "video";
+  const capa = document.createElement("div");
+  capa.className = "capa";
+  const img = document.createElement("img");
+  img.loading = "lazy";
+  img.alt = "";
+  img.src = `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`;
+  capa.appendChild(img);
+  if (v.ao_vivo || v.duracao) {
+    const t = document.createElement("span");
+    t.className = "tempo" + (v.ao_vivo ? " vivo" : "");
+    t.textContent = v.ao_vivo ? tr("AO VIVO") : tempo(v.duracao);
+    capa.appendChild(t);
+  }
+  const info = document.createElement("div");
+  info.className = "info";
+  const tit = document.createElement("div");
+  tit.className = "tit";
+  tit.textContent = v.titulo;
+  const canal = document.createElement("div");
+  canal.className = "canal-yt";
+  canal.textContent = v.canal;
+  info.append(tit, canal);
+  b.append(capa, info);
+  b.addEventListener("click", () => { toast(tr("Abrindo no YouTube da TV")); enviar("youtube", v.id); });
+  return b;
+}
+
+$("#form-yt").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const termo = buscaYt.value.trim();
+  if (!termo) return;
+  buscaYt.blur();
+  const aviso = document.createElement("div");
+  aviso.className = "carregando";
+  aviso.textContent = tr("Buscando…");
+  resultadosYt.replaceChildren(aviso);
+  try {
+    const r = await fetch("/api/youtube?q=" + encodeURIComponent(termo));
+    const dados = await r.json();
+    if (!r.ok) throw new Error(dados.erro);
+    if (!dados.length) { aviso.textContent = tr("Nada encontrado."); return; }
+    resultadosYt.replaceChildren(...dados.map(cartaoVideo));
+  } catch (err) {
+    aviso.textContent = tr("A busca falhou. Tenta de novo.");
+  }
+});
+
+// ---- sem zoom de pinça no iPhone (o toque duplo já sai com touch-action: manipulation) ----
+["gesturestart", "gesturechange", "gestureend"].forEach((ev) => document.addEventListener(ev, (e) => e.preventDefault(), { passive: false }));
+
+const teclas = { ArrowUp: "UP", ArrowDown: "DOWN", ArrowLeft: "LEFT", ArrowRight: "RIGHT", Enter: "ENTER", Escape: "BACK", Backspace: "BACK", h: "HOME", H: "HOME" };
+document.addEventListener("keydown", (e) => {
+  // atalhos só fora de campos: dentro de qualquer input, as teclas são do campo (apagar, h, m…)
+  if (!estado || !estado.online || e.metaKey || e.ctrlKey || e.target.closest("input, textarea")) return;
+  if (teclas[e.key]) { e.preventDefault(); enviar("botao", teclas[e.key]); }
+  else if (e.key === "+" || e.key === "=") enviar("volume_mais");
+  else if (e.key === "-") enviar("volume_menos");
+  else if (e.key === "m" || e.key === "M") enviar("mudo");
+});
+
+carregar();
+setInterval(() => { if (document.visibilityState === "visible" && !pendente) carregar(); }, 2000);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") carregar(); });
+</script>
+</body>
+</html>

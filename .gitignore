@@ -1,0 +1,13 @@
+# saída do build (app, zip, DMG, site montado)
+build/
+# configuração pessoal (site, conta, caminhos dos segredos)
+publicar.conf
+# nunca: chaves, certificados, keychains
+*.key
+*.pem
+*.p12
+*.keychain-db
+client-key
+.DS_Store
+__pycache__/
+.wrangler/

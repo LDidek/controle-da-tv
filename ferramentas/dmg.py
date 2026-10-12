@@ -1,0 +1,20 @@
+# Configuração do dmgbuild: janela com o app, a pasta Aplicativos e as instruções (pt, en, es) desenhadas no fundo.
+app = defines["app"]
+format = "ULMO"
+files = [app]
+symlinks = {"Aplicativos": "/Applications"}
+icon = defines["icone"]
+background = defines["fundo"]
+window_rect = ((200, 100), (660, 548))
+default_view = "icon-view"
+show_status_bar = False
+show_tab_view = False
+show_toolbar = False
+show_pathbar = False
+show_sidebar = False
+show_icon_preview = False
+include_icon_view_settings = True
+arrange_by = None
+icon_size = 112
+text_size = 14
+icon_locations = {"Controle da TV.app": (165, 150), "Aplicativos": (495, 150)}

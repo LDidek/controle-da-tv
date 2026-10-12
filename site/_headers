@@ -1,0 +1,17 @@
+/versao.json
+  Cache-Control: no-cache, no-store, must-revalidate
+  Access-Control-Allow-Origin: *
+/ControleDaTV.dmg
+  Cache-Control: no-cache
+  Content-Type: application/x-apple-diskimage
+/instalar.sh
+  Cache-Control: no-cache
+  Content-Type: text/plain; charset=utf-8
+/*.zip
+  Cache-Control: public, max-age=31536000, immutable
+/
+  Cache-Control: no-cache
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  X-Robots-Tag: noindex

@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="pt-BR" data-l="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Controle da TV</title>
+<meta name="description" content="Controle remoto da TV LG (webOS) na barra de menus do Mac. Gratuito e de código aberto. · Remote control for LG webOS TVs in the Mac menu bar. Free and open source.">
+<link rel="icon" type="image/png" href="/icone.png">
+<script>
+  // Idioma: escolha feita pela pessoa (botão) > ?lang= > idiomas do navegador > inglês.
+  // Roda antes de a página aparecer, para não piscar em outro idioma.
+  (function () {
+    var l = new URLSearchParams(location.search).get("lang"), salvo = null;
+    try { salvo = localStorage.getItem("idioma-escolhido"); } catch (e) {}
+    l = l || salvo;
+    if (!l) {
+      var lista = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language || ""];
+      for (var i = 0; i < lista.length && !l; i++) {
+        var c = String(lista[i]).toLowerCase();
+        l = c.indexOf("pt") === 0 ? "pt" : c.indexOf("es") === 0 ? "es" : c.indexOf("en") === 0 ? "en" : null;
+      }
+    }
+    if (["pt", "en", "es"].indexOf(l) < 0) l = "en";
+    document.documentElement.setAttribute("data-l", l);
+    document.documentElement.lang = l === "pt" ? "pt-BR" : l;
+  })();
+</script>
+<style>
+  :root {
+    --fundo: #f4f6f9; --cartao: #ffffff; --texto: #1b2230; --suave: #5b6576; --borda: #dde2ea;
+    --azul: #1f6fe5; --azul-claro: #e8f1ff; --amarelo: #fff6dd; --amarelo-borda: #ecd28f; --marrom: #6b4a07;
+    --sobre-azul: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --fundo: #111418; --cartao: #1a1f26; --texto: #eef1f5; --suave: #a3adbd; --borda: #2c333d;
+      --azul: #5aa9ff; --azul-claro: #16263b; --amarelo: #2b2412; --amarelo-borda: #5e4c1d; --marrom: #f1d58e;
+      --sobre-azul: #0b1a2e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--fundo); color: var(--texto);
+         font: 19px/1.6 -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }
+  main { max-width: 780px; margin: 0 auto; padding: 24px 16px 64px; }
+  [data-lang] { display: none !important; }
+  html[data-l="pt"] [data-lang="pt"], html[data-l="en"] [data-lang="en"], html[data-l="es"] [data-lang="es"] { display: block !important; }
+  html[data-l="pt"] span[data-lang="pt"], html[data-l="en"] span[data-lang="en"], html[data-l="es"] span[data-lang="es"] { display: inline !important; }
+  .idiomas { display: flex; justify-content: flex-end; gap: 6px; margin-bottom: 18px; }
+  .idiomas button { font: inherit; font-size: 15px; background: var(--cartao); color: var(--texto); border: 1px solid var(--borda);
+                    border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+  .idiomas button[aria-pressed="true"] { background: var(--azul); color: var(--sobre-azul); border-color: var(--azul); font-weight: 700; }
+  header { display: flex; gap: 20px; align-items: center; margin-bottom: 26px; }
+  header img { width: 96px; height: 96px; flex: none; }
+  h1 { font-size: 34px; line-height: 1.15; margin: 0 0 6px; }
+  header p { margin: 0; color: var(--suave); }
+  .baixar { background: var(--cartao); border: 1px solid var(--borda); border-radius: 20px; padding: 26px; text-align: center; margin-bottom: 34px; }
+  .botao { display: inline-block; background: var(--azul); color: var(--sobre-azul); text-decoration: none; font-weight: 700;
+           font-size: 22px; padding: 16px 34px; border-radius: 999px; }
+  .botao:focus-visible, .idiomas button:focus-visible { outline: 3px solid var(--texto); outline-offset: 3px; }
+  .baixar small { display: block; margin-top: 12px; color: var(--suave); font-size: 16px; }
+  h2 { font-size: 26px; margin: 34px 0 8px; }
+  .calma { color: var(--suave); margin: 0 0 22px; }
+  .cartao { background: var(--cartao); border: 1px solid var(--borda); border-radius: 18px; padding: 20px 22px; margin-bottom: 14px; }
+  .cartao p { margin: 0 0 10px; } .cartao p:last-child { margin-bottom: 0; }
+  ul.lista { margin: 0; padding-left: 22px; } ul.lista li { margin: 4px 0; }
+  ol.passos { list-style: none; padding: 0; margin: 0; counter-reset: passo; }
+  ol.passos > li { counter-increment: passo; position: relative; background: var(--cartao); border: 1px solid var(--borda);
+                   border-radius: 18px; padding: 22px 22px 22px 84px; margin-bottom: 14px; }
+  ol.passos > li::before { content: counter(passo); position: absolute; left: 22px; top: 22px; width: 44px; height: 44px;
+                           border-radius: 50%; background: var(--azul); color: var(--sobre-azul); font-weight: 700; font-size: 22px;
+                           display: flex; align-items: center; justify-content: center; }
+  ol.passos h3 { margin: 4px 0 6px; font-size: 21px; }
+  ol.passos p { margin: 0 0 8px; }
+  .aviso { background: var(--amarelo); border: 1px solid var(--amarelo-borda); color: var(--marrom);
+           border-radius: 14px; padding: 12px 16px; margin-top: 10px; font-size: 17px; }
+  .desenho { margin-top: 12px; border-radius: 14px; background: var(--fundo); border: 1px solid var(--borda);
+             padding: 16px; display: flex; justify-content: center; }
+  .desenho svg { max-width: 100%; height: auto; }
+  .caminho { display: inline-block; background: var(--azul-claro); border-radius: 8px; padding: 2px 10px; font-weight: 600; }
+  details { margin-top: 14px; background: var(--cartao); border: 1px solid var(--borda); border-radius: 16px; padding: 16px 20px; }
+  summary { cursor: pointer; font-weight: 700; }
+  pre { background: #0f1720; color: #e6edf6; padding: 14px 16px; border-radius: 12px; overflow-x: auto; font-size: 15px; white-space: pre-wrap; word-break: break-all; }
+  a { color: var(--azul); }
+  footer { margin-top: 40px; color: var(--suave); font-size: 15px; text-align: center; }
+  footer p { margin: 4px 0; }
+  @media (max-width: 560px) {
+    body { font-size: 18px; }
+    header { flex-direction: column; text-align: center; }
+    ol.passos > li { padding: 74px 18px 18px; }
+    ol.passos > li::before { left: 18px; top: 18px; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <nav class="idiomas" aria-label="Idioma / Language / Idioma">
+    <button type="button" data-escolher="pt" lang="pt-BR">Português</button>
+    <button type="button" data-escolher="en" lang="en">English</button>
+    <button type="button" data-escolher="es" lang="es">Español</button>
+  </nav>
+
+  <header>
+    <img src="/icone.png" alt="">
+    <div>
+      <h1>Controle da TV</h1>
+      <p data-lang="pt">O controle remoto da TV LG na barra de menus do Mac. Gratuito e de código aberto.</p>
+      <p data-lang="en">A remote control for LG TVs that lives in the Mac menu bar. Free and open source.</p>
+      <p data-lang="es">El control remoto de la TV LG en la barra de menús del Mac. Gratis y de código abierto.</p>
+    </div>
+  </header>
+
+  <section class="baixar">
+    <a class="botao" href="/ControleDaTV.dmg"><span data-lang="pt">Baixar o Controle da TV</span><span data-lang="en">Download Controle da TV</span><span data-lang="es">Descargar Controle da TV</span></a>
+    <small data-lang="pt">Versão {{VERSAO}} · {{TAMANHO_DMG}} MB · Mac com chip Apple (M1 ou mais novo) e macOS 14 ou mais novo</small>
+    <small data-lang="en">Version {{VERSAO}} · {{TAMANHO_DMG}} MB · Mac with Apple silicon (M1 or newer) and macOS 14 or newer</small>
+    <small data-lang="es">Versión {{VERSAO}} · {{TAMANHO_DMG}} MB · Mac con chip de Apple (M1 o más nuevo) y macOS 14 o más nuevo</small>
+  </section>
+
+  <!-- ===================== PORTUGUÊS ===================== -->
+  <div data-lang="pt">
+    <h2>O que é</h2>
+    <div class="cartao">
+      <p>Um aplicativo pequeno para Mac que transforma o computador num controle remoto da TV LG da casa. Ele fica no alto da tela, perto do relógio, e conversa com a TV pela rede Wi-Fi de casa: sem cabos, sem conta e sem nuvem.</p>
+      <p>Foi feito para quem tem pouca familiaridade com tecnologia: a primeira configuração é um passo a passo com desenhos, um passo por tela, e depois ele se atualiza sozinho.</p>
+    </div>
+
+    <h2>Para que serve</h2>
+    <div class="cartao">
+      <ul class="lista">
+        <li>Ligar e desligar a TV pelo Mac.</li>
+        <li>Mudar o volume e tirar o som.</li>
+        <li>Trocar a entrada (HDMI, TV ao vivo).</li>
+        <li>Abrir os aplicativos da TV: Netflix, YouTube, Globoplay, Prime Video, Disney+ e os outros instalados.</li>
+        <li>Buscar no YouTube com o teclado do Mac e mandar o vídeo direto para a TV.</li>
+        <li>Setas, OK, Voltar e Início, como no controle remoto.</li>
+        <li>Usar também pelo celular: o app abre uma página de controle no navegador de qualquer aparelho na mesma rede Wi-Fi.</li>
+      </ul>
+    </div>
+
+    <h2>Com quais TVs funciona</h2>
+    <div class="cartao">
+      <p>TVs LG com o sistema <b>webOS</b> (em geral, os modelos smart da LG a partir de 2014). Foi feito e testado com a <b>LG 50UK6510PSF</b> (2018, webOS 4.4). Outros modelos LG webOS devem funcionar, mas não foram testados. TVs de outras marcas não funcionam.</p>
+      <p>Para o Mac conseguir <b>ligar</b> a TV, três opções precisam estar ativas no menu da TV: <span class="caminho">Rede › LG Connect Apps</span>, <span class="caminho">Geral › Mobile TV On › Ligar via Wi-Fi</span> e <span class="caminho">Geral › Início Rápido+</span>. Os nomes podem variar um pouco conforme o modelo.</p>
+    </div>
+
+    <h2>Do que precisa</h2>
+    <div class="cartao">
+      <ul class="lista">
+        <li>Mac com chip Apple (M1 ou mais novo) e macOS 14 (Sonoma) ou mais novo.</li>
+        <li>Mac e TV na mesma rede de casa.</li>
+        <li>Internet na primeira vez: o app baixa uns 50 MB de componentes.</li>
+        <li>Aceitar, uma vez, o pedido de conexão que aparece na tela da TV.</li>
+      </ul>
+    </div>
+
+    <h2>Privacidade</h2>
+    <div class="cartao">
+      <p>O Mac fala direto com a TV, dentro de casa. Não há conta, cadastro nem coleta de dados, e nada passa por servidor nosso. O app só usa a internet para baixar os componentes na primeira vez, procurar atualizações neste site e fazer as buscas no YouTube que você pedir. Detalhes nos <a href="/termos?lang=pt">Termos de Uso</a>.</p>
+    </div>
+
+    <h2>Como instalar</h2>
+    <p class="calma">Com calma, um passo de cada vez. Nada aqui estraga o computador. Ficou com dúvida? {{AJUDA_PT}}</p>
+    <ol class="passos">
+      <li>
+        <h3>Baixe o arquivo</h3>
+        <p>Clique no botão azul <b>Baixar o Controle da TV</b>, aqui em cima. O arquivo vai para a pasta <b>Downloads</b> (Transferências). Espere terminar de baixar.</p>
+      </li>
+      <li>
+        <h3>Abra o arquivo baixado</h3>
+        <p>Abra a pasta <b>Downloads</b> e dê <b>dois cliques</b> no arquivo <b>ControleDaTV.dmg</b>. Vai abrir uma janela com o ícone do app, uma seta e a pasta Aplicativos.</p>
+      </li>
+      <li>
+        <h3>Arraste para Aplicativos</h3>
+        <p>Clique no ícone do <b>Controle da TV</b>, <b>segure o botão</b> e arraste até a pasta <b>Aplicativos</b>, do lado direito. Solte. Pronto, ele foi copiado.</p>
+      </li>
+      <li>
+        <h3>Abra o Controle da TV pela primeira vez</h3>
+        <p>Abra a pasta <b>Aplicativos</b> e dê <b>dois cliques</b> no <b>Controle da TV</b>.</p>
+        <p>O Mac vai mostrar um aviso dizendo que não pode verificar o app. <b>É normal</b>: o app não vem da App Store e não passa pela verificação paga da Apple.</p>
+        <div class="aviso">Nesse aviso, clique em <b>Concluído</b>. <b>Não</b> clique em “Mover para o Lixo”.</div>
+      </li>
+      <li>
+        <h3>Libere o app nos Ajustes (só desta vez)</h3>
+        <p>Clique na maçã <b></b> no canto de cima, à esquerda, e escolha <b>Ajustes do Sistema</b>. Na lista da esquerda, clique em <span class="caminho">Privacidade e Segurança</span> e desça a página até o fim. Vai aparecer uma frase sobre o “Controle da TV”, com o botão <b>Abrir Mesmo Assim</b>. Clique nele.</p>
+        <p>O Mac pede a <b>senha do computador</b> (a mesma de quando liga o Mac). Digite e confirme. Se aparecer mais um aviso, clique em <b>Abrir Mesmo Assim</b> de novo.</p>
+      </li>
+      <li>
+        <h3>Siga a configuração</h3>
+        <p>Abre uma janela chamada <b>Configuração</b>, que explica cada passo com desenhos. Vá devagar, lendo cada tela e clicando no botão azul. No fim, o controle fica lá em cima, perto do relógio: é o <b>desenho de uma TV</b>.</p>
+      </li>
+    </ol>
+    <details>
+      <summary>Para quem usa o Terminal: instalação rápida (sem os avisos dos passos 4 e 5)</summary>
+      <p>Abra o Terminal e cole:</p>
+      <pre>curl -fsSL {{SITE}}/instalar.sh | bash</pre>
+      <p>O comando baixa a versão mais nova, confere o arquivo e a assinatura, coloca o app em Aplicativos e abre a configuração.</p>
+    </details>
+
+    <h2>Código aberto</h2>
+    <div class="cartao">
+      <p>O Controle da TV é um projeto pessoal, gratuito e de código aberto, com licença MIT. O código está no GitHub: <a href="{{REPO}}">{{REPO}}</a>.</p>
+      <p><b>Não temos nenhum vínculo com a LG.</b> “LG” e “webOS” são marcas da LG Electronics; as demais marcas citadas pertencem aos seus donos e aparecem só para indicar compatibilidade. Veja os <a href="/termos?lang=pt">Termos de Uso</a>.</p>
+    </div>
+  </div>
+
+  <!-- ===================== ENGLISH ===================== -->
+  <div data-lang="en">
+    <h2>What it is</h2>
+    <div class="cartao">
+      <p>A small Mac app that turns your computer into a remote control for the LG TV at home. It sits at the top of the screen, next to the clock, and talks to the TV over your home Wi-Fi: no cables, no account and no cloud.</p>
+      <p>It was made for people who aren't comfortable with technology: the first setup is a step-by-step guide with drawings, one step per screen, and after that it updates itself.</p>
+    </div>
+
+    <h2>What it does</h2>
+    <div class="cartao">
+      <ul class="lista">
+        <li>Turn the TV on and off from the Mac.</li>
+        <li>Change the volume and mute.</li>
+        <li>Switch inputs (HDMI, live TV).</li>
+        <li>Open the TV apps: Netflix, YouTube, Prime Video, Disney+ and any other installed app.</li>
+        <li>Search YouTube with the Mac keyboard and send the video straight to the TV.</li>
+        <li>Arrows, OK, Back and Home, just like the remote.</li>
+        <li>Use it from your phone too: the app serves a remote control page that opens in the browser of any device on the same Wi-Fi.</li>
+      </ul>
+    </div>
+
+    <h2>Which TVs work</h2>
+    <div class="cartao">
+      <p>LG TVs running <b>webOS</b> (generally LG smart TVs from 2014 onward). It was built and tested with the <b>LG 50UK6510PSF</b> (2018, webOS 4.4). Other LG webOS models should work but haven't been tested. TVs from other brands don't work.</p>
+      <p>For the Mac to <b>turn on</b> the TV, three options must be enabled in the TV menu: <span class="caminho">Network › LG Connect Apps</span>, <span class="caminho">General › Mobile TV On › Turn on via Wi-Fi</span> and <span class="caminho">General › Quick Start+</span>. Names may vary slightly by model.</p>
+    </div>
+
+    <h2>Requirements</h2>
+    <div class="cartao">
+      <ul class="lista">
+        <li>A Mac with Apple silicon (M1 or newer) running macOS 14 (Sonoma) or newer.</li>
+        <li>Mac and TV on the same home network.</li>
+        <li>Internet the first time: the app downloads about 50 MB of components.</li>
+        <li>Accepting, once, the connection request that shows up on the TV screen.</li>
+      </ul>
+    </div>
+
+    <h2>Privacy</h2>
+    <div class="cartao">
+      <p>The Mac talks directly to the TV, inside your home. There's no account, no sign-up and no data collection, and nothing goes through our servers. The app only uses the internet to download its components the first time, check for updates on this site, and run the YouTube searches you ask for. Details in the <a href="/termos?lang=en">Terms of Use</a>.</p>
+    </div>
+
+    <h2>How to install</h2>
+    <p class="calma">Calmly, one step at a time. Nothing here can harm the computer. Stuck? {{AJUDA_EN}}</p>
+    <ol class="passos">
+      <li>
+        <h3>Download the file</h3>
+        <p>Click the blue <b>Download Controle da TV</b> button above. The file goes to your <b>Downloads</b> folder. Wait until it finishes.</p>
+      </li>
+      <li>
+        <h3>Open the downloaded file</h3>
+        <p>Open the <b>Downloads</b> folder and <b>double-click</b> <b>ControleDaTV.dmg</b>. A window opens with the app icon, an arrow and the Applications folder (labeled “Aplicativos”).</p>
+      </li>
+      <li>
+        <h3>Drag it to Applications</h3>
+        <p>Click the <b>Controle da TV</b> icon, <b>hold the button</b> and drag it onto the Applications folder on the right. Let go. Done, it's copied.</p>
+      </li>
+      <li>
+        <h3>Open Controle da TV for the first time</h3>
+        <p>Open the <b>Applications</b> folder and <b>double-click</b> <b>Controle da TV</b>.</p>
+        <p>macOS will warn that it can't verify the app. <b>That's normal</b>: the app doesn't come from the App Store and doesn't go through Apple's paid notarization.</p>
+        <div class="aviso">In that warning, click <b>Done</b>. <b>Don't</b> click “Move to Trash”.</div>
+      </li>
+      <li>
+        <h3>Allow the app in Settings (only this once)</h3>
+        <p>Click the Apple menu <b></b> at the top left and choose <b>System Settings</b>. In the sidebar, click <span class="caminho">Privacy &amp; Security</span> and scroll all the way down. You'll see a line about “Controle da TV” with an <b>Open Anyway</b> button. Click it.</p>
+        <p>macOS asks for your <b>computer password</b> (the one you use to log in). Type it and confirm. If another warning appears, click <b>Open Anyway</b> again.</p>
+      </li>
+      <li>
+        <h3>Follow the setup</h3>
+        <p>A window called <b>Setup</b> opens and explains each step with drawings. Take your time, read each screen and click the blue button. When it's done, the remote lives at the top of the screen, next to the clock: it's the <b>drawing of a TV</b>.</p>
+      </li>
+    </ol>
+    <details>
+      <summary>Terminal users: quick install (skips the warnings in steps 4 and 5)</summary>
+      <p>Open Terminal and paste:</p>
+      <pre>curl -fsSL {{SITE}}/instalar.sh | bash</pre>
+      <p>It downloads the latest version, checks the file and its signature, puts the app in Applications and opens the setup.</p>
+    </details>
+
+    <h2>Open source</h2>
+    <div class="cartao">
+      <p>Controle da TV is a free, personal, open-source project under the MIT license. The code is on GitHub: <a href="{{REPO}}">{{REPO}}</a>.</p>
+      <p><b>We have no affiliation with LG.</b> “LG” and “webOS” are trademarks of LG Electronics; other brands mentioned belong to their owners and appear only to describe compatibility. See the <a href="/termos?lang=en">Terms of Use</a>.</p>
+    </div>
+  </div>
+
+  <!-- ===================== ESPAÑOL ===================== -->
+  <div data-lang="es">
+    <h2>Qué es</h2>
+    <div class="cartao">
+      <p>Una pequeña app para Mac que convierte la computadora en un control remoto de la TV LG de la casa. Vive arriba en la pantalla, junto al reloj, y habla con la TV por el Wi-Fi de casa: sin cables, sin cuenta y sin nube.</p>
+      <p>Está pensada para quien no se lleva bien con la tecnología: la primera configuración es una guía paso a paso con dibujos, un paso por pantalla, y después se actualiza sola.</p>
+    </div>
+
+    <h2>Para qué sirve</h2>
+    <div class="cartao">
+      <ul class="lista">
+        <li>Encender y apagar la TV desde el Mac.</li>
+        <li>Cambiar el volumen y silenciar.</li>
+        <li>Cambiar la entrada (HDMI, TV en vivo).</li>
+        <li>Abrir las apps de la TV: Netflix, YouTube, Prime Video, Disney+ y cualquier otra instalada.</li>
+        <li>Buscar en YouTube con el teclado del Mac y mandar el video directo a la TV.</li>
+        <li>Flechas, OK, Atrás e Inicio, como en el control remoto.</li>
+        <li>Usarlo también desde el teléfono: la app abre una página de control en el navegador de cualquier aparato en el mismo Wi-Fi.</li>
+      </ul>
+    </div>
+
+    <h2>Con qué TVs funciona</h2>
+    <div class="cartao">
+      <p>TVs LG con sistema <b>webOS</b> (en general, los modelos smart de LG desde 2014). Fue hecho y probado con la <b>LG 50UK6510PSF</b> (2018, webOS 4.4). Otros modelos LG webOS deberían funcionar, pero no se probaron. Las TVs de otras marcas no funcionan.</p>
+      <p>Para que el Mac pueda <b>encender</b> la TV, tres opciones tienen que estar activadas en el menú de la TV: <span class="caminho">Red › LG Connect Apps</span>, <span class="caminho">General › Mobile TV On › Encender por Wi-Fi</span> e <span class="caminho">General › Inicio rápido+</span>. Los nombres pueden variar un poco según el modelo.</p>
+    </div>
+
+    <h2>Qué necesitas</h2>
+    <div class="cartao">
+      <ul class="lista">
+        <li>Mac con chip de Apple (M1 o más nuevo) y macOS 14 (Sonoma) o más nuevo.</li>
+        <li>Mac y TV en la misma red de casa.</li>
+        <li>Internet la primera vez: la app descarga unos 50 MB de componentes.</li>
+        <li>Aceptar, una sola vez, la solicitud de conexión que aparece en la pantalla de la TV.</li>
+      </ul>
+    </div>
+
+    <h2>Privacidad</h2>
+    <div class="cartao">
+      <p>El Mac habla directo con la TV, dentro de casa. No hay cuenta, registro ni recolección de datos, y nada pasa por servidores nuestros. La app solo usa internet para descargar sus componentes la primera vez, buscar actualizaciones en este sitio y hacer las búsquedas de YouTube que pidas. Detalles en los <a href="/termos?lang=es">Términos de uso</a>.</p>
+    </div>
+
+    <h2>Cómo instalar</h2>
+    <p class="calma">Con calma, un paso a la vez. Nada aquí daña la computadora. ¿Tienes dudas? {{AJUDA_ES}}</p>
+    <ol class="passos">
+      <li>
+        <h3>Descarga el archivo</h3>
+        <p>Haz clic en el botón azul <b>Descargar Controle da TV</b>, aquí arriba. El archivo va a la carpeta <b>Descargas</b>. Espera a que termine.</p>
+      </li>
+      <li>
+        <h3>Abre el archivo descargado</h3>
+        <p>Abre la carpeta <b>Descargas</b> y haz <b>doble clic</b> en <b>ControleDaTV.dmg</b>. Se abre una ventana con el ícono de la app, una flecha y la carpeta Aplicaciones (con el nombre “Aplicativos”).</p>
+      </li>
+      <li>
+        <h3>Arrástrala a Aplicaciones</h3>
+        <p>Haz clic en el ícono de <b>Controle da TV</b>, <b>mantén el botón</b> y arrástralo hasta la carpeta de la derecha. Suelta. Listo, se copió.</p>
+      </li>
+      <li>
+        <h3>Abre Controle da TV por primera vez</h3>
+        <p>Abre la carpeta <b>Aplicaciones</b> y haz <b>doble clic</b> en <b>Controle da TV</b>.</p>
+        <p>macOS avisará que no puede verificar la app. <b>Es normal</b>: la app no viene de la App Store y no pasa por la verificación paga de Apple.</p>
+        <div class="aviso">Cierra ese aviso. <b>No</b> elijas “Trasladar a la Papelera”.</div>
+      </li>
+      <li>
+        <h3>Permite la app en Ajustes (solo esta vez)</h3>
+        <p>Haz clic en la manzana <b></b> arriba a la izquierda y elige <b>Ajustes del Sistema</b>. En la lista de la izquierda, haz clic en <span class="caminho">Privacidad y seguridad</span> y baja hasta el final. Verás una frase sobre “Controle da TV” con el botón <b>Abrir igualmente</b>. Haz clic en él.</p>
+        <p>macOS pide la <b>contraseña de la computadora</b> (la misma con la que entras al Mac). Escríbela y confirma. Si aparece otro aviso, vuelve a hacer clic en <b>Abrir igualmente</b>.</p>
+      </li>
+      <li>
+        <h3>Sigue la configuración</h3>
+        <p>Se abre una ventana llamada <b>Configuración</b> que explica cada paso con dibujos. Ve despacio, lee cada pantalla y haz clic en el botón azul. Al final, el control queda arriba en la pantalla, junto al reloj: es el <b>dibujo de una TV</b>.</p>
+      </li>
+    </ol>
+    <details>
+      <summary>Para quien usa la Terminal: instalación rápida (sin los avisos de los pasos 4 y 5)</summary>
+      <p>Abre la Terminal y pega:</p>
+      <pre>curl -fsSL {{SITE}}/instalar.sh | bash</pre>
+      <p>Descarga la versión más nueva, verifica el archivo y la firma, pone la app en Aplicaciones y abre la configuración.</p>
+    </details>
+
+    <h2>Código abierto</h2>
+    <div class="cartao">
+      <p>Controle da TV es un proyecto personal, gratuito y de código abierto, con licencia MIT. El código está en GitHub: <a href="{{REPO}}">{{REPO}}</a>.</p>
+      <p><b>No tenemos ningún vínculo con LG.</b> “LG” y “webOS” son marcas de LG Electronics; las demás marcas mencionadas pertenecen a sus dueños y aparecen solo para indicar compatibilidad. Consulta los <a href="/termos?lang=es">Términos de uso</a>.</p>
+    </div>
+  </div>
+
+  <footer>
+    <p>Controle da TV · {{VERSAO}} · <a href="{{REPO}}">GitHub</a> · <a href="/termos" data-termos>Termos de Uso</a></p>
+    <p data-lang="pt">Projeto independente, sem vínculo com a LG Electronics.</p>
+    <p data-lang="en">Independent project, not affiliated with LG Electronics.</p>
+    <p data-lang="es">Proyecto independiente, sin vínculo con LG Electronics.</p>
+  </footer>
+</main>
+<script>
+(function () {
+  const nomesTermos = { pt: "Termos de Uso", en: "Terms of Use", es: "Términos de uso" };
+  function mostrar(l) {
+    document.documentElement.dataset.l = l;
+    document.documentElement.lang = l === "pt" ? "pt-BR" : l;
+    document.querySelectorAll("[data-escolher]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.escolher === l)));
+    const t = document.querySelector("[data-termos]");
+    t.textContent = nomesTermos[l];
+    t.href = l === "pt" ? "/termos?lang=pt" : "/termos?lang=" + l;
+  }
+  mostrar(document.documentElement.dataset.l);
+  document.querySelectorAll("[data-escolher]").forEach((b) => b.addEventListener("click", () => {
+    try { localStorage.setItem("idioma-escolhido", b.dataset.escolher); } catch (e) {}  // só a escolha da pessoa fica gravada
+    mostrar(b.dataset.escolher);
+  }));
+})();
+</script>
+</body>
+</html>

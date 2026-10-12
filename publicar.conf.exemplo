@@ -1,0 +1,24 @@
+# Copie para publicar.conf (que fica fora do git) e ajuste. Tudo é opcional para só compilar;
+# SITE e CLOUDFLARE_CONTA são necessários para publicar e ter atualização automática.
+
+# Identificador do app. Troque se for distribuir a sua versão.
+BUNDLE_ID="io.github.seu-usuario.controle-da-tv"
+
+# Onde ficam o certificado de assinatura e a chave Ed25519 das atualizações (nunca dentro do repo).
+SEGREDOS="$HOME/.config/controle-da-tv/segredos"
+NOME_CERTIFICADO="Controle da TV (Seu Nome)"
+
+# Site onde o app procura atualizações (versao.json) e de onde se baixa o DMG.
+SITE="https://tv.exemplo.com"
+
+# Frase da lateral do assistente ("Ficou com dúvida?"), em cada idioma.
+AJUDA_PT="É só chamar a Ana."
+AJUDA_EN="Just ask Ana."
+AJUDA_ES="Solo llama a Ana."
+
+AUTOR="Seu Nome"
+REPO="https://github.com/LDidek/controle-da-tv"
+
+# Publicação na Cloudflare (Worker só com arquivos estáticos e domínio próprio).
+CLOUDFLARE_CONTA="id-da-conta"
+WORKER="controle-da-tv"
