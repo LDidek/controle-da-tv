@@ -16,6 +16,7 @@ import asyncio
 import base64
 import json
 import logging
+import pathlib
 import re
 import socket
 import ssl
@@ -37,7 +38,8 @@ SEGREDO = re.compile(r"""(token=|AccessToken["']?\s*[:=]\s*["']?|loungeIdToken=)
 CDN = "https://d1oxlq5h9kq8q5.cloudfront.net/tvstore/contents/"
 log = logging.getLogger("samsung")
 
-# (IDs possíveis do app, nome, ícone na loja da Samsung ou endereço completo, é do sistema). O mesmo app muda de ID entre
+# (IDs possíveis do app, nome, ícone, é do sistema). Ícone: caminho na loja da Samsung, endereço completo,
+# "local:arquivo" (ao lado deste arquivo) ou uma lista dessas opções, tentadas em ordem. O mesmo app muda de ID entre
 # gerações de TV; vale o primeiro que a TV reconhecer.
 CATALOGO = [
     (["3201907018807", "11101200001"], "Netflix", "3201907018807/icon_198x198_20220913014109378.png", False),
@@ -51,7 +53,8 @@ CATALOGO = [
     (["3201611010983"], "YouTube Kids", None, False),
     (["3201604009182"], "Telecine", None, False),
     (["3202302030097"], "Crunchyroll", "3202302030097/icon_198x198_20240729082452564.png", False),
-    (["3202306031311"], "Stremio", "https://web.stremio.com/images/stremio_symbol.png", False),
+    # O símbolo do site é transparente (ficava num quadrado branco): o ícone local é o mesmo símbolo num fundo da marca.
+    (["3202306031311"], "Stremio", ["local:icone-stremio.png", "https://web.stremio.com/images/stremio_symbol.png"], False),
     (["3201808016802"], "Pluto TV", "3201808016802/icon_198x198_20240830071201812.png", False),
     (["3201806016390"], "DAZN", "3201806016390/icon_198x198_20240529034626589.png", False),
     (["3201803015944", "3202006021105"], "Discovery+", "3202006021105/icon_198x198_20210706050608049.png", False),
@@ -1035,11 +1038,17 @@ class TVSamsung:
 
     async def icone(self, app_id):
         icone = POR_ID.get(app_id, (None, None))[1]
-        if not icone:
-            return None
-        try:
-            url = icone if icone.startswith("https://") else CDN + icone  # ícone que não está na loja: o do site do app
-            async with self.sessao().get(url, timeout=aiohttp.ClientTimeout(total=6)) as r:
-                return await r.read() if r.status == 200 else None
-        except (aiohttp.ClientError, asyncio.TimeoutError, OSError):
-            return None
+        for fonte in icone if isinstance(icone, list) else [icone] if icone else []:
+            if fonte.startswith("local:"):
+                arquivo = pathlib.Path(__file__).with_name(fonte[len("local:"):])
+                if arquivo.is_file():
+                    return arquivo.read_bytes()
+                continue
+            url = fonte if fonte.startswith("https://") else CDN + fonte
+            try:
+                async with self.sessao().get(url, timeout=aiohttp.ClientTimeout(total=6)) as r:
+                    if r.status == 200:
+                        return await r.read()
+            except (aiohttp.ClientError, asyncio.TimeoutError, OSError):
+                pass
+        return None

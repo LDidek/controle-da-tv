@@ -740,7 +740,7 @@ function cartaoApp(app) {
   const img = document.createElement("img");
   img.loading = "lazy";
   img.alt = "";
-  img.src = "/icone/" + encodeURIComponent(app.id);
+  img.src = "/icone/" + encodeURIComponent(app.id) + "?v=2";  // ?v=: muda quando um ícone é trocado (o cache dura 1 dia)
   // fundo branco quando o ícone carrega: os transparentes (AirPlay = desenho preto) sumiam no fundo escuro
   img.onload = () => { ic.style.background = "#fff"; };
   img.onerror = () => { img.remove(); ic.textContent = iniciais(app.titulo); };

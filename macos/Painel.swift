@@ -1133,7 +1133,7 @@ final class PaletaDeApps: ObservableObject {
         pedidos.insert(id)
         Task {
             let caminho = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
-            guard let url = URL(string: "http://127.0.0.1:\(porta)/icone/\(caminho)"),
+            guard let url = URL(string: "http://127.0.0.1:\(porta)/icone/\(caminho)?v=\(versaoIcones)"),
                   let (dados, _) = try? await URLSession.shared.data(from: url) else {
                 pedidos.remove(id)
                 return
@@ -1180,13 +1180,16 @@ final class PaletaDeApps: ObservableObject {
     }
 }
 
+/// Muda quando um ícone é trocado: o servidor manda guardar os ícones por 1 dia.
+let versaoIcones = 2
+
 struct IconeApp: View {
     let id: String
     let tamanho: CGFloat
 
     var body: some View {
         let caminho = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
-        AsyncImage(url: URL(string: "http://127.0.0.1:\(porta)/icone/\(caminho)")) { fase in
+        AsyncImage(url: URL(string: "http://127.0.0.1:\(porta)/icone/\(caminho)?v=\(versaoIcones)")) { fase in
             if let imagem = fase.image {
                 imagem.resizable().scaledToFill()
             } else {

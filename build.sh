@@ -49,7 +49,7 @@ swiftc -O -swift-version 5 -parse-as-library -target arm64-apple-macos14.0 $EXTR
 
 cp "$UV" "$APP/Contents/MacOS/uv"
 chmod 755 "$APP/Contents/MacOS/uv"
-cp servidor/servidor.py servidor/samsung.py servidor/roku.py servidor/index.html requisitos.txt "$SAIDA/AppIcon.icns" "$APP/Contents/Resources/"
+cp servidor/servidor.py servidor/samsung.py servidor/roku.py servidor/icone-stremio.png servidor/index.html requisitos.txt "$SAIDA/AppIcon.icns" "$APP/Contents/Resources/"
 
 # textos que o próprio macOS mostra (pedido de Rede Local), nos três idiomas
 escrever_strings() {
