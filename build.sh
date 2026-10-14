@@ -49,16 +49,16 @@ swiftc -O -swift-version 5 -parse-as-library -target arm64-apple-macos14.0 $EXTR
 
 cp "$UV" "$APP/Contents/MacOS/uv"
 chmod 755 "$APP/Contents/MacOS/uv"
-cp servidor/servidor.py servidor/index.html requisitos.txt "$SAIDA/AppIcon.icns" "$APP/Contents/Resources/"
+cp servidor/servidor.py servidor/samsung.py servidor/index.html requisitos.txt "$SAIDA/AppIcon.icns" "$APP/Contents/Resources/"
 
 # textos que o próprio macOS mostra (pedido de Rede Local), nos três idiomas
 escrever_strings() {
   mkdir -p "$APP/Contents/Resources/$1.lproj"
   printf '"NSLocalNetworkUsageDescription" = "%s";\n' "$2" > "$APP/Contents/Resources/$1.lproj/InfoPlist.strings"
 }
-escrever_strings pt "Para encontrar e controlar a TV LG na rede de casa."
-escrever_strings en "To find and control the LG TV on your home network."
-escrever_strings es "Para encontrar y controlar la TV LG en la red de casa."
+escrever_strings pt "Para encontrar e controlar a TV na rede de casa."
+escrever_strings en "To find and control the TV on your home network."
+escrever_strings es "Para encontrar y controlar la TV en la red de casa."
 
 xml() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
 COPY="Código aberto (licença MIT)"
@@ -84,7 +84,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSUIElement</key><true/>
   <key>NSHumanReadableCopyright</key><string>$(xml "$COPY")</string>
   <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
-  <key>NSLocalNetworkUsageDescription</key><string>Para encontrar e controlar a TV LG na rede de casa.</string>
+  <key>NSLocalNetworkUsageDescription</key><string>Para encontrar e controlar a TV na rede de casa.</string>
   <key>ControleTVSite</key><string>$(xml "$SITE")</string>
   <key>ControleTVChavePublica</key><string>$CHAVE_PUB</string>
   <key>ControleTVAjuda</key><string>$(xml "$AJUDA_PT")</string>

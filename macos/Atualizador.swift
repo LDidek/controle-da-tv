@@ -208,15 +208,16 @@ final class Atualizador: ObservableObject {
         }
         registrar("atualização: trocado; reabrindo \(atual.path)")
         let pid = ProcessInfo.processInfo.processIdentifier
+        // Caminhos entram como argumentos ($1, $2), nunca colados no texto do comando.
         let roteiro = """
         while /bin/kill -0 \(pid) 2>/dev/null; do /bin/sleep 0.3; done
-        /usr/bin/open "\(atual.path)"
+        /usr/bin/open "$1"
         /bin/sleep 5
-        /bin/rm -rf "\(pasta.path)"
+        /bin/rm -rf "$2"
         """
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/bin/sh")
-        p.arguments = ["-c", roteiro]
+        p.arguments = ["-c", roteiro, "sh", atual.path, pasta.path]
         p.standardOutput = FileHandle.nullDevice
         p.standardError = FileHandle.nullDevice
         do { try p.run() } catch { registrar("atualização: não consegui agendar a reabertura: \(error)") }

@@ -3,21 +3,21 @@
 <!-- pt -->
 ## Termos de Uso do Controle da TV
 
-Última atualização: 11 de outubro de 2026.
+Última atualização: 14 de outubro de 2026.
 
 ### 1. O que é
 
-O Controle da TV é um programa de computador gratuito e de código aberto, criado por Luiz Didek como projeto pessoal, sem fins lucrativos, e distribuído sob a [licença MIT](LICENSE). Ele permite controlar uma TV LG com sistema webOS a partir de um Mac, pela rede de casa. Ao baixar, instalar ou usar o programa, você concorda com estes termos. Se não concordar, não baixe, não instale e não use.
+O Controle da TV é um programa de computador gratuito e de código aberto, criado por Luiz Didek como projeto pessoal, sem fins lucrativos, e distribuído sob a [licença MIT](LICENSE). Ele permite controlar uma TV LG com sistema webOS ou uma TV Samsung com sistema Tizen a partir de um Mac, pela rede de casa. Ao baixar, instalar ou usar o programa, você concorda com estes termos. Se não concordar, não baixe, não instale e não use.
 
-### 2. Nenhum vínculo com a LG ou com outras marcas
+### 2. Nenhum vínculo com a LG, a Samsung ou outras marcas
 
-O Controle da TV é um projeto independente. Ele **não é** feito, patrocinado, endossado, aprovado, certificado nem mantido pela LG Electronics Inc. ou por qualquer empresa do grupo LG, nem pela Apple Inc., Google LLC (YouTube), Netflix, Inc., Globo Comunicação e Participações S.A. (Globoplay), Amazon.com, Inc. (Prime Video), The Walt Disney Company (Disney+), Warner Bros. Discovery (HBO Max / Max) ou qualquer outra empresa citada.
+O Controle da TV é um projeto independente. Ele **não é** feito, patrocinado, endossado, aprovado, certificado nem mantido pela LG Electronics Inc. ou por qualquer empresa do grupo LG, nem pela Samsung Electronics Co., Ltd. ou por qualquer empresa do grupo Samsung, nem pela Apple Inc., Google LLC (YouTube), Netflix, Inc., Globo Comunicação e Participações S.A. (Globoplay), Amazon.com, Inc. (Prime Video), The Walt Disney Company (Disney+), Warner Bros. Discovery (HBO Max / Max) ou qualquer outra empresa citada.
 
-"LG", "webOS", "LG Connect Apps", "Mobile TV On", "Quick Start+", "Apple", "Mac", "macOS", "YouTube" e as demais marcas, nomes de produtos e logotipos mencionados pertencem aos seus respectivos titulares. Eles aparecem apenas para descrever com quais produtos o programa funciona (uso nominativo), sem sugerir parceria ou aprovação. O Controle da TV não usa logotipos dessas empresas.
+"LG", "webOS", "LG Connect Apps", "Mobile TV On", "Quick Start+", "Samsung", "Tizen", "Apple", "Mac", "macOS", "YouTube" e as demais marcas, nomes de produtos e logotipos mencionados pertencem aos seus respectivos titulares. Eles aparecem apenas para descrever com quais produtos o programa funciona (uso nominativo), sem sugerir parceria ou aprovação. O Controle da TV não usa logotipos dessas empresas na própria marca. Os ícones dos aplicativos que aparecem no painel são mostrados na hora, como a TV os exibe, e não fazem parte do programa: na LG vêm da própria TV; na Samsung, da loja de aplicativos da Samsung.
 
 ### 3. O que o programa faz e o que não faz
 
-O programa conversa com a TV pela rede local usando a interface de controle que a própria TV oferece a aplicativos de controle remoto, depois que você aceita o pedido de conexão na tela da TV, e liga a TV enviando um sinal de rede padrão (Wake-on-LAN). Ele **não** modifica o sistema da TV, **não** contorna proteções de conteúdo (DRM), **não** baixa, grava nem redistribui vídeos e **não** dá acesso a conteúdo pago. A busca no YouTube apenas lista resultados públicos; o vídeo escolhido é aberto pelo aplicativo oficial do YouTube instalado na TV.
+O programa conversa com a TV pela rede local usando a interface de controle que a própria TV oferece a aplicativos de controle remoto, depois que você aceita o pedido de conexão na tela da TV, e liga a TV pela mesma interface ou enviando um sinal de rede padrão (Wake-on-LAN). Na Samsung, se você ligar a opção Controle Remoto IP da TV, o programa também usa essa interface oficial de controle, que pede outra autorização na tela. Ele **não** modifica o sistema da TV, **não** contorna proteções de conteúdo (DRM), **não** baixa, grava nem redistribui vídeos e **não** dá acesso a conteúdo pago. A busca no YouTube apenas lista resultados públicos; o vídeo escolhido é aberto pelo aplicativo oficial do YouTube instalado na TV (na Samsung, pelo mesmo recurso que o celular usa para transmitir).
 
 ### 4. Sem garantia
 
@@ -33,11 +33,12 @@ Você se compromete a usar o programa apenas em TVs, computadores e redes que se
 
 ### 7. Privacidade e dados pessoais (LGPD)
 
-O programa **não coleta, não armazena em servidores, não vende e não envia ao autor** dados pessoais. A chave de pareamento com a TV e as configurações (endereço da TV e identificação da rede de casa) ficam guardadas só no seu computador. O programa acessa a internet apenas para:
+O programa **não coleta, não armazena em servidores, não vende e não envia ao autor** dados pessoais. As chaves de pareamento com as TVs e as configurações (endereço de cada TV e identificação da rede de cada casa) ficam guardadas só no seu computador. O programa acessa a internet apenas para:
 
 - **baixar, na primeira vez e quando necessário, os componentes de que precisa** (o interpretador Python e bibliotecas de código aberto, a partir dos repositórios públicos desses projetos);
 - **procurar e baixar atualizações** no site de distribuição (na versão oficial, https://tv.didek.com.br, hospedado pela Cloudflare). Como em qualquer acesso à internet, o provedor de hospedagem pode registrar dados técnicos, como endereço IP, data e hora, para funcionamento e segurança do serviço;
-- **fazer as buscas no YouTube que você pedir**, que vão diretamente ao YouTube/Google e seguem a política de privacidade deles.
+- **fazer as buscas no YouTube que você pedir**, que vão diretamente ao YouTube/Google e seguem a política de privacidade deles;
+- **na TV Samsung, tocar o vídeo escolhido e mostrar os ícones dos apps**: o vídeo é enviado ao YouTube da TV pelo mesmo serviço do YouTube/Google que o celular usa para transmitir, e os ícones vêm da loja de aplicativos da Samsung.
 
 Não há cadastro, conta, cookies de rastreamento, publicidade nem análise de uso. A página de controle pelo celular só funciona dentro da sua rede de casa.
 
@@ -68,21 +69,21 @@ Dúvidas, problemas e sugestões: https://github.com/LDidek/controle-da-tv/issue
 <!-- en -->
 ## Controle da TV Terms of Use
 
-Last updated: October 11, 2026.
+Last updated: October 14, 2026.
 
 ### 1. What it is
 
-Controle da TV is free, open-source software created by Luiz Didek as a personal, non-commercial project and distributed under the [MIT License](LICENSE). It lets you control an LG TV running webOS from a Mac over your home network. By downloading, installing or using the software, you agree to these terms. If you do not agree, do not download, install or use it.
+Controle da TV is free, open-source software created by Luiz Didek as a personal, non-commercial project and distributed under the [MIT License](LICENSE). It lets you control an LG TV running webOS or a Samsung TV running Tizen from a Mac over your home network. By downloading, installing or using the software, you agree to these terms. If you do not agree, do not download, install or use it.
 
-### 2. No affiliation with LG or other brands
+### 2. No affiliation with LG, Samsung or other brands
 
-Controle da TV is an independent project. It is **not** made, sponsored, endorsed, approved, certified or maintained by LG Electronics Inc. or any LG group company, nor by Apple Inc., Google LLC (YouTube), Netflix, Inc., Globo Comunicação e Participações S.A. (Globoplay), Amazon.com, Inc. (Prime Video), The Walt Disney Company (Disney+), Warner Bros. Discovery (HBO Max / Max) or any other company mentioned.
+Controle da TV is an independent project. It is **not** made, sponsored, endorsed, approved, certified or maintained by LG Electronics Inc. or any LG group company, nor by Samsung Electronics Co., Ltd. or any Samsung group company, nor by Apple Inc., Google LLC (YouTube), Netflix, Inc., Globo Comunicação e Participações S.A. (Globoplay), Amazon.com, Inc. (Prime Video), The Walt Disney Company (Disney+), Warner Bros. Discovery (HBO Max / Max) or any other company mentioned.
 
-"LG", "webOS", "LG Connect Apps", "Mobile TV On", "Quick Start+", "Apple", "Mac", "macOS", "YouTube" and all other trademarks, product names and logos mentioned belong to their respective owners. They are used only to describe which products the software works with (nominative use), without implying any partnership or endorsement. Controle da TV does not use these companies' logos.
+"LG", "webOS", "LG Connect Apps", "Mobile TV On", "Quick Start+", "Samsung", "Tizen", "Apple", "Mac", "macOS", "YouTube" and all other trademarks, product names and logos mentioned belong to their respective owners. They are used only to describe which products the software works with (nominative use), without implying any partnership or endorsement. Controle da TV does not use these companies' logos in its own branding. The app icons shown in the panel are displayed on the fly, the way the TV shows them, and are not part of the software: on LG they come from the TV itself; on Samsung, from Samsung's app store.
 
 ### 3. What the software does and does not do
 
-The software talks to the TV over the local network using the control interface the TV itself offers to remote-control apps, after you accept the connection request on the TV screen, and turns the TV on by sending a standard network signal (Wake-on-LAN). It does **not** modify the TV's system, does **not** circumvent content protection (DRM), does **not** download, record or redistribute videos, and does **not** grant access to paid content. The YouTube search only lists public results; the chosen video is opened by the official YouTube app installed on the TV.
+The software talks to the TV over the local network using the control interface the TV itself offers to remote-control apps, after you accept the connection request on the TV screen, and turns the TV on through that same interface or by sending a standard network signal (Wake-on-LAN). On Samsung, if you turn on the TV's IP Remote option, the software also uses that official control interface, which asks for another authorization on screen. It does **not** modify the TV's system, does **not** circumvent content protection (DRM), does **not** download, record or redistribute videos, and does **not** grant access to paid content. The YouTube search only lists public results; the chosen video is opened by the official YouTube app installed on the TV (on Samsung, through the same feature a phone uses to cast).
 
 ### 4. No warranty
 
@@ -98,11 +99,12 @@ You agree to use the software only with TVs, computers and networks that you own
 
 ### 7. Privacy and personal data
 
-The software **does not collect, store on servers, sell or send to the author** any personal data. The TV pairing key and the settings (the TV's address and the identification of your home network) are stored only on your computer. The software only uses the internet to:
+The software **does not collect, store on servers, sell or send to the author** any personal data. The TV pairing keys and the settings (each TV's address and the identification of each home network) are stored only on your computer. The software only uses the internet to:
 
 - **download, the first time and when needed, the components it requires** (the Python interpreter and open-source libraries, from those projects' public repositories);
 - **check for and download updates** from the distribution site (for the official version, https://tv.didek.com.br, hosted by Cloudflare). As with any internet access, the hosting provider may log technical data such as IP address, date and time for the operation and security of the service;
-- **run the YouTube searches you ask for**, which go directly to YouTube/Google and are subject to their privacy policy.
+- **run the YouTube searches you ask for**, which go directly to YouTube/Google and are subject to their privacy policy;
+- **on a Samsung TV, play the chosen video and show the app icons**: the video is sent to the TV's YouTube through the same YouTube/Google service a phone uses to cast, and the icons come from Samsung's app store.
 
 There is no sign-up, account, tracking cookies, advertising or usage analytics. The phone remote page only works inside your home network.
 
@@ -133,21 +135,21 @@ Questions, problems and suggestions: https://github.com/LDidek/controle-da-tv/is
 <!-- es -->
 ## Términos de uso de Controle da TV
 
-Última actualización: 11 de octubre de 2026.
+Última actualización: 14 de octubre de 2026.
 
 ### 1. Qué es
 
-Controle da TV es un programa gratuito y de código abierto, creado por Luiz Didek como proyecto personal, sin fines de lucro, y distribuido bajo la [licencia MIT](LICENSE). Permite controlar una TV LG con sistema webOS desde un Mac, por la red de casa. Al descargar, instalar o usar el programa, aceptas estos términos. Si no estás de acuerdo, no lo descargues, no lo instales y no lo uses.
+Controle da TV es un programa gratuito y de código abierto, creado por Luiz Didek como proyecto personal, sin fines de lucro, y distribuido bajo la [licencia MIT](LICENSE). Permite controlar una TV LG con sistema webOS o una TV Samsung con sistema Tizen desde un Mac, por la red de casa. Al descargar, instalar o usar el programa, aceptas estos términos. Si no estás de acuerdo, no lo descargues, no lo instales y no lo uses.
 
-### 2. Ningún vínculo con LG ni con otras marcas
+### 2. Ningún vínculo con LG, Samsung ni con otras marcas
 
-Controle da TV es un proyecto independiente. **No** está hecho, patrocinado, respaldado, aprobado, certificado ni mantenido por LG Electronics Inc. ni por ninguna empresa del grupo LG, ni por Apple Inc., Google LLC (YouTube), Netflix, Inc., Globo Comunicação e Participações S.A. (Globoplay), Amazon.com, Inc. (Prime Video), The Walt Disney Company (Disney+), Warner Bros. Discovery (HBO Max / Max) ni ninguna otra empresa mencionada.
+Controle da TV es un proyecto independiente. **No** está hecho, patrocinado, respaldado, aprobado, certificado ni mantenido por LG Electronics Inc. ni por ninguna empresa del grupo LG, ni por Samsung Electronics Co., Ltd. ni por ninguna empresa del grupo Samsung, ni por Apple Inc., Google LLC (YouTube), Netflix, Inc., Globo Comunicação e Participações S.A. (Globoplay), Amazon.com, Inc. (Prime Video), The Walt Disney Company (Disney+), Warner Bros. Discovery (HBO Max / Max) ni ninguna otra empresa mencionada.
 
-"LG", "webOS", "LG Connect Apps", "Mobile TV On", "Quick Start+", "Apple", "Mac", "macOS", "YouTube" y las demás marcas, nombres de productos y logotipos mencionados pertenecen a sus respectivos titulares. Aparecen solo para describir con qué productos funciona el programa (uso nominativo), sin sugerir asociación ni aprobación. Controle da TV no usa logotipos de esas empresas.
+"LG", "webOS", "LG Connect Apps", "Mobile TV On", "Quick Start+", "Samsung", "Tizen", "Apple", "Mac", "macOS", "YouTube" y las demás marcas, nombres de productos y logotipos mencionados pertenecen a sus respectivos titulares. Aparecen solo para describir con qué productos funciona el programa (uso nominativo), sin sugerir asociación ni aprobación. Controle da TV no usa logotipos de esas empresas en su propia marca. Los íconos de las apps que aparecen en el panel se muestran en el momento, como la TV los muestra, y no forman parte del programa: en LG vienen de la propia TV; en Samsung, de la tienda de apps de Samsung.
 
 ### 3. Qué hace el programa y qué no hace
 
-El programa habla con la TV por la red local usando la interfaz de control que la propia TV ofrece a las apps de control remoto, después de que aceptas la solicitud de conexión en la pantalla de la TV, y enciende la TV enviando una señal de red estándar (Wake-on-LAN). **No** modifica el sistema de la TV, **no** elude protecciones de contenido (DRM), **no** descarga, graba ni redistribuye videos y **no** da acceso a contenido pago. La búsqueda en YouTube solo lista resultados públicos; el video elegido se abre en la app oficial de YouTube instalada en la TV.
+El programa habla con la TV por la red local usando la interfaz de control que la propia TV ofrece a las apps de control remoto, después de que aceptas la solicitud de conexión en la pantalla de la TV, y enciende la TV por esa misma interfaz o enviando una señal de red estándar (Wake-on-LAN). En Samsung, si activas la opción Control remoto IP de la TV, el programa también usa esa interfaz oficial de control, que pide otra autorización en la pantalla. **No** modifica el sistema de la TV, **no** elude protecciones de contenido (DRM), **no** descarga, graba ni redistribuye videos y **no** da acceso a contenido pago. La búsqueda en YouTube solo lista resultados públicos; el video elegido se abre en la app oficial de YouTube instalada en la TV (en Samsung, con el mismo recurso que usa el teléfono para transmitir).
 
 ### 4. Sin garantía
 
@@ -163,11 +165,12 @@ Te comprometes a usar el programa solo con TVs, computadoras y redes que sean tu
 
 ### 7. Privacidad y datos personales
 
-El programa **no recopila, no almacena en servidores, no vende ni envía al autor** datos personales. La clave de emparejamiento con la TV y la configuración (dirección de la TV e identificación de la red de casa) se guardan solo en tu computadora. El programa usa internet únicamente para:
+El programa **no recopila, no almacena en servidores, no vende ni envía al autor** datos personales. Las claves de emparejamiento con las TVs y la configuración (dirección de cada TV e identificación de la red de cada casa) se guardan solo en tu computadora. El programa usa internet únicamente para:
 
 - **descargar, la primera vez y cuando sea necesario, los componentes que necesita** (el intérprete de Python y bibliotecas de código abierto, desde los repositorios públicos de esos proyectos);
 - **buscar y descargar actualizaciones** en el sitio de distribución (en la versión oficial, https://tv.didek.com.br, alojado en Cloudflare). Como en cualquier acceso a internet, el proveedor de alojamiento puede registrar datos técnicos, como la dirección IP, la fecha y la hora, para el funcionamiento y la seguridad del servicio;
-- **hacer las búsquedas en YouTube que pidas**, que van directamente a YouTube/Google y se rigen por su política de privacidad.
+- **hacer las búsquedas en YouTube que pidas**, que van directamente a YouTube/Google y se rigen por su política de privacidad;
+- **en una TV Samsung, reproducir el video elegido y mostrar los íconos de las apps**: el video se envía al YouTube de la TV por el mismo servicio de YouTube/Google que usa el teléfono para transmitir, y los íconos vienen de la tienda de apps de Samsung.
 
 No hay registro, cuenta, cookies de seguimiento, publicidad ni análisis de uso. La página de control desde el teléfono solo funciona dentro de tu red de casa.
 

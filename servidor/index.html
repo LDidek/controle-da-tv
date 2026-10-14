@@ -239,7 +239,7 @@ details[open] > summary svg { transform: rotate(180deg); }
   <div class="status">
     <span class="dot" id="dot"></span>
     <div style="min-width:0">
-      <div class="titulo">TV LG</div>
+      <div class="titulo" id="titulo">TV</div>
       <div class="sub" id="sub">Conectando…</div>
     </div>
   </div>
@@ -284,7 +284,7 @@ details[open] > summary svg { transform: rotate(180deg); }
         <button id="limpar"><svg><use href="#i-del"/></svg>Limpar</button>
         <button id="enviar-enter" class="principal"><svg><use href="#i-enter"/></svg>Buscar / Enter</button>
       </div>
-      <p class="nota">Para campos que abrem o teclado da LG (navegador e alguns apps). O YouTube tem teclado próprio: use "Buscar no YouTube".</p>
+      <p class="nota">Para campos que abrem o teclado da TV (navegador e alguns apps). O YouTube tem teclado próprio: use "Buscar no YouTube".</p>
     </div>
 
     <div class="card controle">
@@ -399,9 +399,13 @@ const TXT = {
 "Search / Enter",
 "Buscar / Enter"
 ],
-"Para campos que abrem o teclado da LG (navegador e alguns apps). O YouTube tem teclado próprio: use \"Buscar no YouTube\".": [
-"For fields that open the LG keyboard (browser and some apps). YouTube has its own keyboard: use \"Search YouTube\".",
-"Para campos que abren el teclado de LG (navegador y algunas apps). YouTube tiene su propio teclado: usa \"Buscar en YouTube\"."
+"Para campos que abrem o teclado da TV (navegador e alguns apps). O YouTube tem teclado próprio: use \"Buscar no YouTube\".": [
+"For fields that open the TV keyboard (browser and some apps). YouTube has its own keyboard: use \"Search YouTube\".",
+"Para campos que abren el teclado de la TV (navegador y algunas apps). YouTube tiene su propio teclado: usa \"Buscar en YouTube\"."
+],
+"Outras entradas": [
+"Other inputs",
+"Otras entradas"
 ],
 "Volume": [
 "Volume",
@@ -567,7 +571,9 @@ const tr = (pt) => IDIOMA === "pt" ? pt : ((TXT[pt] || [])[IDIOMA === "en" ? 0 :
 })();
 const $ = (s) => document.querySelector(s);
 const LIVE_TV = "com.webos.app.livetv";
-const PRIMEIROS = ["netflix", "youtube.leanback.v4", "globoplaywebos", "amazon", "com.disney.disneyplus-prod", "com.wbd.stream"];
+// LG e Samsung: Netflix, YouTube, Globoplay, Prime Video, Disney+, HBO Max
+const PRIMEIROS = ["netflix", "youtube.leanback.v4", "globoplaywebos", "amazon", "com.disney.disneyplus-prod", "com.wbd.stream",
+  "3201907018807", "111299001912", "3201908019022", "3201910019365", "3201901017640", "3202301029760"];
 const ordem = (id) => { const i = PRIMEIROS.indexOf(id); return i < 0 ? PRIMEIROS.length : i; };
 const nomeCurto = (t) => t.split(/ [:–-] /)[0];
 let estado = null;
@@ -657,18 +663,21 @@ function renderApps() {
 function renderEntradas() {
   const box = $("#entradas");
   box.replaceChildren();
-  const itens = [{ id: LIVE_TV, nome: tr("TV ao vivo"), conectado: true, app: LIVE_TV, ehApp: true }, ...estado.entradas];
+  const itens = [...estado.entradas];
+  if (estado.ao_vivo !== false) itens.unshift({ id: LIVE_TV, nome: tr("TV ao vivo"), conectado: true, app: LIVE_TV, ehApp: true });
+  // Samsung sem o Controle Remoto IP: o menu de entradas da própria TV
+  if (estado.marca === "samsung" && estado.ao_vivo === false) itens.push({ id: "SOURCE", nome: tr("Outras entradas"), conectado: true, botao: true });
   for (const e of itens) {
     const b = document.createElement("button");
     b.className = "chip" + (e.app === estado.app_atual ? " atual" : "") + (e.conectado ? "" : " apagado");
-    if (e.conectado && !e.ehApp) {
+    if (e.conectado && !e.ehApp && !e.botao) {
       const m = document.createElement("span");
       m.className = "mini";
       b.appendChild(m);
     }
     b.append(e.nome);
     b.title = e.conectado ? "" : tr("Nada conectado nesta entrada");
-    b.addEventListener("click", () => { toast(e.nome); e.ehApp ? enviar("app", e.id) : enviar("entrada", e.id); });
+    b.addEventListener("click", () => { toast(e.nome); e.botao ? enviar("botao", e.id) : e.ehApp ? enviar("app", e.id) : enviar("entrada", e.id); });
     box.appendChild(b);
   }
 }
@@ -676,6 +685,7 @@ function renderEntradas() {
 function render() {
   const online = estado && estado.online;
   document.body.classList.toggle("offline", !online);
+  if (estado && estado.marca) $("#titulo").textContent = estado.marca === "samsung" ? "TV Samsung" : "TV LG";
   const dot = $("#dot"), sub = $("#sub"), power = $("#power");
   power.classList.remove("on", "off");
   if (!online) {

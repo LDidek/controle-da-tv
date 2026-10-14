@@ -6,7 +6,9 @@ import ServiceManagement
 import SwiftUI
 
 let liveTV = "com.webos.app.livetv"
-let primeiros = ["netflix", "youtube.leanback.v4", "globoplaywebos", "amazon", "com.disney.disneyplus-prod", "com.wbd.stream"]
+// LG e Samsung (IDs da loja de cada uma): Netflix, YouTube, Globoplay, Prime Video, Disney+, HBO Max
+let primeiros = ["netflix", "youtube.leanback.v4", "globoplaywebos", "amazon", "com.disney.disneyplus-prod", "com.wbd.stream",
+                 "3201907018807", "111299001912", "3201908019022", "3201910019365", "3201901017640", "3202301029760"]
 
 struct AppTV: Decodable, Identifiable, Equatable {
     let id: String
@@ -16,6 +18,14 @@ struct AppTV: Decodable, Identifiable, Equatable {
     var nomeCurto: String { titulo.components(separatedBy: " : ")[0] }
 }
 struct EntradaTV: Decodable, Identifiable, Equatable { let id: String; let nome: String; let conectado: Bool; var app: String? }
+/// Videogame ligado na TV (o servidor acha o PlayStation na rede e descobre em que entrada ele está).
+struct ConsoleTV: Decodable, Equatable {
+    let entrada: String
+    var nome: String?
+    var tipo: String?
+    var ligado: Bool?
+    var simbolo: String { tipo == "XBOX" ? "xbox.logo" : "playstation.logo" }
+}
 struct EstadoTV: Decodable, Equatable {
     let online: Bool
     var pareado: Bool?
@@ -27,6 +37,12 @@ struct EstadoTV: Decodable, Equatable {
     var entradas: [EntradaTV]?
     var apps: [AppTV]?
     var ligando: Bool?
+    var marca: String?    // "lg" ou "samsung" (servidor antigo não manda: LG)
+    var nome: String?
+    var ao_vivo: Bool?    // a TV aceita "TV ao vivo" pela rede (na Samsung, só com o Controle Remoto IP)
+    var console: ConsoleTV?
+
+    var ehSamsung: Bool { marca == "samsung" }
 }
 
 @MainActor
@@ -49,6 +65,7 @@ final class Controle: ObservableObject {
     private var timer: Timer?
     private var tiques = 0
     private var ultimoMac: String?? = .none
+    private var macAvisado: String?
     private var avisouPorta = false
     private var iniciando = false
     private var falhas = 0
@@ -82,9 +99,26 @@ final class Controle: ObservableObject {
             return !self.painelAberto && !self.assistente.aberto && Date().timeIntervalSince(self.ultimaInteracao) > 120
         }
         Task { await iniciar() }
+        Controle.atual = self
     }
 
-    static func lerConfigCompleta() -> Bool { temChave() && ConfigCasa.ler().roteador != nil }
+    static weak var atual: Controle?
+
+    /// Alguma TV pareada (em qualquer casa).
+    static func lerConfigCompleta() -> Bool { ConfigCasa.ler().tvs.contains { $0.roteador != nil && $0.pareada } }
+
+    /// A TV desta rede já está pareada?
+    static func tvDaRedePareada() -> Bool { ConfigCasa.ler().tv(doRoteador: macDoRoteador())?.pareada == true }
+
+    /// Abriram o app de novo (Finder, Dock, Spotlight). Numa rede sem TV, é o jeito de conectar outra TV.
+    func reaberto() {
+        if assistente.aberto { assistente.abrir(); return }
+        if configCompleta && !emCasa {
+            assistente.abrir(em: .tv, novaTV: true)
+        } else if !configCompleta || !pendencias.isEmpty {
+            assistente.abrir()
+        }
+    }
 
     private func iniciar() async {
         try? await Task.sleep(for: .milliseconds(600))  // deixa o app terminar de abrir
@@ -155,16 +189,18 @@ final class Controle: ObservableObject {
         Task {
             let mac = await Task.detached { macDoRoteador() }.value
             let config = ConfigCasa.ler()
-            var casa = config.roteador != nil && mac == config.roteador
+            var casa = config.tv(doRoteador: mac) != nil
             if mac != ultimoMac { registrar("roteador lido: \(mac ?? "nenhum")"); ultimoMac = mac }
-            // Roteador trocado (ex.: a operadora mudou o aparelho): se a TV responde no mesmo IP, é a mesma casa.
-            if !casa, configCompleta, let mac, let ip = config.tv_ip,
-               Date().timeIntervalSince(ultimaChecagemTV) > 60 {
+            // Roteador trocado (ex.: a operadora mudou o aparelho): se uma TV responde no mesmo IP, é a mesma casa.
+            if !casa, configCompleta, let mac, Date().timeIntervalSince(ultimaChecagemTV) > 60 {
                 ultimaChecagemTV = Date()
-                if await tvRespondeEm(ip) {
-                    registrar("roteador novo (\(mac)), mas a TV responde em \(ip): é a mesma casa")
-                    Controle.gravarRoteador(mac)
-                    casa = true
+                for tv in config.tvs where tv.tv_ip != nil {
+                    if await tvResponde(tv) {
+                        registrar("roteador novo (\(mac)), mas a TV responde em \(tv.tv_ip ?? ""): é a mesma casa")
+                        Controle.gravarRoteador(mac, tv: tv)
+                        casa = true
+                        break
+                    }
                 }
             }
             if casa != emCasa {
@@ -175,6 +211,7 @@ final class Controle: ObservableObject {
             if visivel != iconeVisivel { iconeVisivel = visivel }
             if Motor.pronto() && (casa || !configCompleta || assistente.aberto) {
                 await iniciarServidor()
+                if let mac, mac != macAvisado { await avisarCasa(mac) }
                 if casa && configCompleta { await atualizar() }
             } else {
                 pararServidor()
@@ -183,11 +220,30 @@ final class Controle: ObservableObject {
         }
     }
 
+    /// O servidor atende a TV da casa onde o Mac está: avisa quando a rede muda.
+    private func avisarCasa(_ mac: String) async {
+        var req = URLRequest(url: URL(string: "http://127.0.0.1:\(porta)/api/casa")!)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["roteador": mac])
+        req.timeoutInterval = 3
+        if let (_, resposta) = try? await URLSession.shared.data(for: req), (resposta as? HTTPURLResponse)?.statusCode == 200 {
+            macAvisado = mac
+        }
+    }
+
     /// Só quando o servidor está parado (fora de casa): troca o roteador gravado no config.json.
-    static func gravarRoteador(_ mac: String) {
+    static func gravarRoteador(_ mac: String, tv: TVSalva) {
         guard let dados = try? Data(contentsOf: Caminhos.config),
               var json = (try? JSONSerialization.jsonObject(with: dados)) as? [String: Any] else { return }
-        json["roteador"] = mac
+        if var tvs = json["tvs"] as? [[String: Any]] {
+            guard let i = tvs.firstIndex(where: { ($0["roteador"] as? String) == tv.roteador && ($0["tv_ip"] as? String) == tv.tv_ip })
+            else { return }
+            tvs[i]["roteador"] = mac
+            json["tvs"] = tvs
+        } else {
+            json["roteador"] = mac
+        }
         if let novo = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]) {
             try? novo.write(to: Caminhos.config, options: .atomic)
             chmod(Caminhos.config.path, 0o600)
@@ -212,6 +268,7 @@ final class Controle: ObservableObject {
             return
         }
         avisouPorta = false
+        macAvisado = nil
         girarLog("servidor.log")
         let p = Process()
         p.executableURL = Motor.python
@@ -223,6 +280,7 @@ final class Controle: ObservableObject {
             "LANG": "pt_BR.UTF-8",
             "CONTROLE_TV_DADOS": Caminhos.dados.path,
             "CONTROLE_TV_PORTA": String(porta),
+            "CONTROLE_TV_ROTEADOR": (ultimoMac ?? nil) ?? "",
         ]
         let arquivoLog = Caminhos.logs.appendingPathComponent("servidor.log").path
         try? FileManager.default.createDirectory(at: Caminhos.logs, withIntermediateDirectories: true)

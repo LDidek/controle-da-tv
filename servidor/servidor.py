@@ -1,13 +1,15 @@
-"""Controle remoto web da TV LG. Roda no Mac; abre no Mac ou no celular pelo Wi-Fi de casa.
+"""Controle remoto web da TV (LG webOS ou Samsung Tizen). Roda no Mac; abre no Mac ou no celular pelo Wi-Fi de casa.
 
 python servidor.py   →  http://<ip-do-mac>:8765
-A client-key fica só aqui no servidor; o navegador nunca a recebe.
+As chaves de pareamento ficam só aqui no servidor; o navegador nunca as recebe.
 
-Os dados (client-key e config.json com IP/MAC da TV e o roteador de casa) ficam na pasta de
+Os dados (config.json com as TVs, uma por casa, reconhecida pelo roteador) ficam na pasta de
 CONTROLE_TV_DADOS. Sem a variável, usa a mesma pasta do app (~/Library/Application Support/Controle da TV).
+CONTROLE_TV_ROTEADOR diz em que casa o Mac está; o app também avisa pelo /api/casa quando a rede muda.
 """
 import asyncio
 import datetime
+import ipaddress
 import json
 import logging
 import os
@@ -15,12 +17,15 @@ import pathlib
 import re
 import socket
 import time
+from urllib.parse import urlsplit
 
 import aiohttp
 import yt_dlp
 from aiohttp import web
 from aiowebostv import WebOsClient
 from aiowebostv import webos_client as _wc
+
+import samsung
 
 PORTA = int(os.environ.get("CONTROLE_TV_PORTA", "8765"))
 PASTA = pathlib.Path(__file__).parent
@@ -43,6 +48,9 @@ OPCOES_YTDLP = {
     "http_headers": {"Accept-Language": "pt-BR,pt;q=0.9"},
 }
 ENTRADAS_COMO_APP = ("com.webos.app.hdmi", "com.webos.app.externalinput")
+# Formato antigo do config.json (uma TV LG só, campos soltos): continua valendo até a primeira gravação.
+LEGADO = ("tv_ip", "tv_macs", "tv_mac", "tv_modelo", "tv_nome", "roteador", "pareado_em")
+roteador_atual = (os.environ.get("CONTROLE_TV_ROTEADOR") or "").strip().lower() or None
 
 
 # MARK: configuração
@@ -65,22 +73,75 @@ def gravar_privado(caminho, texto):
     tmp.replace(caminho)
 
 
-def gravar_config(novos):
+def tvs_salvas():
+    """Uma TV por casa: [{marca, roteador, tv_ip, tv_macs, tv_modelo, chave, …}]."""
     cfg = ler_config()
-    cfg.update({k: v for k, v in novos.items() if v is not None})
+    if isinstance(cfg.get("tvs"), list):
+        return [t for t in cfg["tvs"] if isinstance(t, dict)]
+    if any(cfg.get(k) for k in LEGADO):
+        return [{**{k: cfg[k] for k in LEGADO if k in cfg}, "marca": "lg"}]
+    return []
+
+
+def gravar_tvs(tvs):
+    cfg = {k: v for k, v in ler_config().items() if k not in LEGADO}
+    cfg["tvs"] = tvs
     gravar_privado(CONFIG, json.dumps(cfg, ensure_ascii=False, indent=2) + "\n")
 
 
-def ler_chave():
-    try:
-        return CHAVE.read_text().strip() or None
-    except OSError:
+def da_casa(t, roteador):
+    return str(t.get("roteador") or "").lower() == str(roteador or "").lower()
+
+
+def tv_salva(roteador=None):
+    """A TV da casa onde o Mac está. Sem saber a casa (servidor aberto à mão), a primeira."""
+    tvs = tvs_salvas()
+    r = roteador or roteador_atual
+    if r:
+        return next((t for t in tvs if da_casa(t, r)), None)
+    return tvs[0] if tvs else None
+
+
+def atualizar_tv(roteador, novos):
+    """Grava campos na TV da casa (a TV pegou outro IP, token novo…)."""
+    tvs = tvs_salvas()
+    for t in tvs:
+        if da_casa(t, roteador):
+            t.update({k: v for k, v in novos.items() if v is not None})
+            gravar_tvs(tvs)
+            return
+
+
+def guardar_tv_pareada(roteador, nova):
+    """Depois do pareamento: a mesma TV mantém o que já tinha (nome da entrada, apps); outra TV substitui."""
+    tvs = tvs_salvas()
+    nova = {k: v for k, v in nova.items() if v is not None}
+    for i, t in enumerate(tvs):
+        if da_casa(t, roteador):
+            mesma = t.get("marca", "lg") == nova.get("marca") and (not t.get("id") or t.get("id") == nova.get("id"))
+            tvs[i] = {**t, **nova} if mesma else nova
+            break
+    else:
+        tvs.append(nova)
+    gravar_tvs(tvs)
+
+
+def chave_da(t):
+    """Token de pareamento. A LG pareada antes das várias casas guarda a chave no arquivo client-key."""
+    if not t:
         return None
+    if t.get("chave"):
+        return t["chave"]
+    if t.get("marca", "lg") == "lg":
+        try:
+            return CHAVE.read_text().strip() or None
+        except OSError:
+            return None
+    return None
 
 
-def macs_da_tv():
-    cfg = ler_config()
-    macs = cfg.get("tv_macs") or ([cfg["tv_mac"]] if cfg.get("tv_mac") else [])
+def macs_da(t):
+    macs = (t or {}).get("tv_macs") or ([t["tv_mac"]] if (t or {}).get("tv_mac") else [])
     return [m.lower() for m in macs if isinstance(m, str) and MAC.fullmatch(m.lower())]
 
 
@@ -133,20 +194,22 @@ async def porta_aberta(ip, timeout=1.0):
         return False
 
 
-async def candidatos():
-    cfg = ler_config()
+async def candidatos(t):
     lista = []
-    nome = cfg.get("tv_nome") or HOSTNAME_PADRAO
-    ip_nome = await asyncio.get_running_loop().run_in_executor(None, resolver, nome)
-    for ip in (ip_nome, cfg.get("tv_ip")):
+    nome = (t or {}).get("tv_nome") or HOSTNAME_PADRAO
+    try:  # numa rede sem TV LG o nome demora 5 s para dar erro
+        ip_nome = await asyncio.wait_for(asyncio.get_running_loop().run_in_executor(None, resolver, nome), 2)
+    except asyncio.TimeoutError:
+        ip_nome = None
+    for ip in (ip_nome, (t or {}).get("tv_ip")):
         if ip and ip not in lista:
             lista.append(ip)
     return lista
 
 
-async def achar_tv(procurar=False):
-    """IP da TV ligada (porta 3000 respondendo) ou None. Com procurar=True, também pergunta na rede (SSDP)."""
-    lista = await candidatos()
+async def achar_tv(t, procurar=False):
+    """IP da TV LG ligada (porta 3000 respondendo) ou None. Com procurar=True, também pergunta na rede (SSDP)."""
+    lista = await candidatos(t)
     for ip in lista:
         if await porta_aberta(ip):
             return ip
@@ -157,16 +220,97 @@ async def achar_tv(procurar=False):
     return None
 
 
+# MARK: videogame na TV (PlayStation se anuncia na rede como faz para o app Remote Play)
+
+CONSOLES = {"PS5": "PlayStation 5", "PS4": "PlayStation 4"}
+EH_CONSOLE = re.compile(r"playstation|\bps ?[345]\b|xbox", re.I)
+console_visto = {"em": 0.0, "dados": None}
+
+
+def procurar_console(espera=1.5):
+    """{"tipo": "PS5", "nome": "PS5 da casa", "ligado": True} ou None. Em repouso ele responde 620."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    s.settimeout(0.3)
+    try:
+        for porta, versao in ((9302, "00030010"), (987, "00020020")):
+            pedido = f"SRCH * HTTP/1.1\ndevice-discovery-protocol-version:{versao}\n".encode()
+            try:
+                s.sendto(pedido, ("255.255.255.255", porta))
+            except OSError:
+                pass
+        fim = time.time() + espera
+        while time.time() < fim:
+            try:
+                dados, _ = s.recvfrom(2048)
+            except socket.timeout:
+                continue
+            linhas = dados.decode(errors="ignore").splitlines()
+            campos = dict(l.split(":", 1) for l in linhas[1:] if ":" in l)
+            tipo = campos.get("host-type", "").strip().upper()
+            if tipo in CONSOLES:
+                return {"tipo": tipo, "nome": campos.get("host-name", "").strip() or CONSOLES[tipo],
+                        "ligado": " 200 " in f" {linhas[0]} "}
+    except OSError:
+        pass
+    finally:
+        s.close()
+    return None
+
+
+def console_da_rede():
+    """O que a última procura achou; procura de novo em segundo plano, no máximo uma vez por minuto."""
+    if time.time() - console_visto["em"] > 60:
+        console_visto["em"] = time.time()
+
+        async def procurar_agora():
+            console_visto["dados"] = await asyncio.get_running_loop().run_in_executor(None, procurar_console)
+
+        console_visto["tarefa"] = asyncio.create_task(procurar_agora())
+    return console_visto["dados"]
+
+
+def marcar_console(estado, achado):
+    """Em que entrada está o videogame: a que tem o nome dele ou, com um só aparelho ligado, essa.
+    O painel ganha o atalho "ir para o videogame"; a entrada passa a se chamar PlayStation 5."""
+    entradas = [dict(e) for e in estado.get("entradas") or []]
+    alvo = next((e for e in entradas if EH_CONSOLE.search(e.get("nome") or "")), None)
+    if alvo is None and achado:
+        conectadas = [e for e in entradas if e.get("conectado")]
+        if len(conectadas) == 1:
+            alvo = conectadas[0]
+            alvo["nome"] = CONSOLES[achado["tipo"]]
+    if alvo is None:
+        return estado
+    console = {"entrada": alvo["id"], "nome": alvo["nome"],
+               "tipo": (achado or {}).get("tipo") or ("XBOX" if "xbox" in alvo["nome"].lower() else "PS"),
+               "ligado": (achado or {}).get("ligado")}
+    estado = {**estado, "entradas": entradas, "console": console}
+    if estado.get("app_atual") == alvo.get("app"):
+        estado["app_titulo"] = alvo["nome"]
+    return estado
+
+
 # MARK: conexão com a TV
 
 
-class TV:
-    def __init__(self):
+class TVLG:
+    marca = "lg"
+
+    def __init__(self, salva, atualizar):
+        self._salva = salva
+        self._atualizar = atualizar
         self.cliente = None
         self.trava = asyncio.Lock()
         self.ip = None
         self.ligando_ate = 0.0
         self.ultima_procura = 0.0
+
+    def salva(self):
+        return self._salva() or {}
+
+    def pareado(self):
+        return chave_da(self._salva()) is not None
 
     def conectado(self):
         return self.cliente is not None and self.cliente.is_connected()
@@ -176,19 +320,19 @@ class TV:
         async with self.trava:
             if self.conectado():
                 return self.cliente
-            chave = ler_chave()
+            chave = chave_da(self._salva())
             if not chave:
                 return None
             # Procura na rede (SSDP) no máximo a cada 30 s, para não pesar com a TV desligada.
             procurar = time.time() - self.ultima_procura > 30
             if procurar:
                 self.ultima_procura = time.time()
-            ip = await achar_tv(procurar=procurar)
+            ip = await achar_tv(self.salva(), procurar=procurar)
             if ip is None:
                 return None
             self.ip = ip
-            if ler_config().get("tv_ip") != ip:
-                gravar_config({"tv_ip": ip})  # a TV pegou outro IP do roteador
+            if self.salva().get("tv_ip") != ip:
+                self._atualizar({"tv_ip": ip})  # a TV pegou outro IP do roteador
             await self.descartar()
             cliente = WebOsClient(ip, client_key=chave)
             await asyncio.wait_for(cliente.connect(), 10)
@@ -203,15 +347,18 @@ class TV:
                 pass
             self.cliente = None
 
-    def ligar(self):
-        ip = self.ip or ler_config().get("tv_ip")
+    async def ligar(self):
+        await asyncio.get_running_loop().run_in_executor(None, self._ligar)
+
+    def _ligar(self):
+        ip = self.ip or self.salva().get("tv_ip")
         destinos = ["255.255.255.255"]
         if ip:
             destinos += [ip.rsplit(".", 1)[0] + ".255", ip]
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         # Manda para os dois endereços físicos (Wi-Fi e cabo): serve a placa que a TV estiver usando.
-        for mac in macs_da_tv():
+        for mac in macs_da(self.salva()):
             pacote = bytes.fromhex("ff" * 6 + mac.replace(":", "") * 16)
             for destino in destinos:
                 for porta in (9, 7):
@@ -223,8 +370,73 @@ class TV:
         s.close()
         self.ligando_ate = time.time() + 40
 
+    async def estado(self):
+        try:
+            cliente = await self.obter()
+        except Exception:
+            await self.descartar()
+            cliente = None
+        if cliente is None:
+            return {"online": False, "pareado": self.pareado(), "ligando": time.time() < self.ligando_ate,
+                    "marca": self.marca, "nome": self.salva().get("nome")}
+        return {**resumo(cliente), "marca": self.marca, "nome": self.salva().get("nome")}
 
-tv = TV()
+    async def agir(self, nome, valor):
+        for tentativa in (1, 2):
+            cliente = await self.obter()
+            if cliente is None:
+                raise samsung.TVDesligada()
+            try:
+                await executar(cliente, nome, valor)
+                if nome == "desligar":
+                    await self.descartar()
+                return
+            except web.HTTPException:
+                raise
+            except Exception:
+                await self.descartar()
+                if tentativa == 2:
+                    raise
+
+    async def icone(self, app_id):
+        cliente = await self.obter()
+        dados = (cliente.tv_state.apps or {}).get(app_id) if cliente else None
+        url = dados and (dados.get("largeIcon") or dados.get("icon"))
+        if not url:
+            return None
+        async with aiohttp.ClientSession() as s, s.get(url, timeout=aiohttp.ClientTimeout(total=5)) as r:
+            return await r.read() if r.status == 200 else None
+
+
+class Gerente:
+    """Qual TV atender: a da casa onde o Mac está agora."""
+
+    def __init__(self):
+        self.atual = None
+        self.chave = None
+
+    def tv(self):
+        t = tv_salva()
+        if t is None:
+            return None
+        roteador = t.get("roteador")
+        chave = (t.get("marca", "lg"), str(roteador), t.get("id"))
+        if self.atual is None or chave != self.chave:
+            if self.atual is not None:
+                asyncio.create_task(self.atual.descartar())
+            salva = (lambda: tv_salva(roteador)) if roteador else tv_salva
+            classe = samsung.TVSamsung if chave[0] == "samsung" else TVLG
+            self.atual = classe(salva, lambda novos: atualizar_tv(roteador, novos))
+            self.chave = chave
+        return self.atual
+
+    async def descartar(self):
+        if self.atual is not None:
+            await self.atual.descartar()
+        self.atual = self.chave = None
+
+
+gerente = Gerente()
 icones = {}
 
 
@@ -236,31 +448,86 @@ class Pareamento:
         self.estado = "parado"  # parado, procurando, conferindo, esperando, pareado, erro
         self.erro = None
         self.tarefa = None
+        self.marca = None
 
     def json(self):
-        return {"estado": self.estado, "erro": self.erro, "pareado": ler_chave() is not None}
+        return {"estado": self.estado, "erro": self.erro, "marca": self.marca,
+                "pareado": chave_da(tv_salva()) is not None}
 
 
 par = Pareamento()
 
 
+async def achar_qualquer_tv():
+    """A TV ligada nesta rede, de qualquer marca: (marca, ip, info) ou None. A já conhecida vem primeiro."""
+    t = tv_salva()
+    async with aiohttp.ClientSession() as sessao:
+        if t is not None and t.get("marca") == "samsung":
+            ip, info = await samsung.procurar(sessao, [t.get("tv_ip")])
+            if samsung.energia(info) == "on":
+                return "samsung", ip, info
+        lg, (ip_s, info_s) = await asyncio.gather(
+            achar_tv(t if (t or {}).get("marca", "lg") == "lg" else None, procurar=True),
+            samsung.procurar(sessao, []))
+        if lg:
+            return "lg", lg, None
+        if samsung.energia(info_s) == "on":
+            return "samsung", ip_s, info_s
+    return None
+
+
 async def parear(roteador):
+    global roteador_atual
     par.erro = None
+    par.marca = None
     par.estado = "procurando"
+    if roteador and MAC.fullmatch(str(roteador).lower()):
+        roteador = roteador_atual = str(roteador).lower()  # o pareamento acontece na rede onde o Mac está
+    else:
+        roteador = roteador_atual
+    try:
+        achada = None
+        for _ in range(4):  # logo depois de abrir, a primeira tentativa na rede às vezes falha
+            achada = await achar_qualquer_tv()
+            if achada:
+                break
+            await asyncio.sleep(1.5)
+        if achada is None:
+            par.estado, par.erro = "erro", "Não encontrei a TV ligada na rede. Ligue a TV e tente de novo."
+            return
+        marca, ip, info = achada
+        par.marca = marca
+        if marca == "samsung":
+            await parear_samsung(ip, info, roteador)
+        else:
+            await parear_lg(ip, roteador)
+        await gerente.descartar()
+        par.estado = "pareado"
+        if marca == "samsung":
+            tv = gerente.tv()
+            if tv is not None:
+                tv.em_segundo_plano(tv.conferir_apps())
+    except asyncio.TimeoutError:
+        par.estado, par.erro = "erro", ("O tempo acabou antes de permitir na TV. Tente de novo." if par.marca == "samsung"
+                                        else "O tempo acabou antes de aceitar na TV. Tente de novo.")
+    except PermissionError:
+        par.estado, par.erro = "erro", "A TV recusou o pedido. Tente de novo e escolha Permitir."
+    except Exception as e:
+        texto = str(e).lower()
+        if "denied" in texto or "reject" in texto or "cancel" in texto or "403" in texto:
+            par.estado, par.erro = "erro", "A TV recusou o pedido. Tente de novo e escolha Aceitar."
+        else:
+            logging.getLogger("pareamento").warning("falhou: %s", samsung.sem_segredo(repr(e)))
+            par.estado, par.erro = "erro", "Não consegui conectar na TV."
+
+
+async def parear_lg(ip, roteador):
+    salva = tv_salva(roteador) if roteador else None
+    chave = chave_da(salva) if (salva or {}).get("marca", "lg") == "lg" else None
+    par.estado = "conferindo" if chave else "esperando"
     cliente = None
     espera_original = _wc.RECEIVE_TIMEOUT
     try:
-        ip = None
-        for _ in range(4):  # logo depois de abrir, a primeira tentativa na rede às vezes falha
-            ip = await achar_tv(procurar=True)
-            if ip:
-                break
-            await asyncio.sleep(1.5)
-        if ip is None:
-            par.estado, par.erro = "erro", "Não encontrei a TV ligada na rede. Ligue a TV e tente de novo."
-            return
-        chave = ler_chave()
-        par.estado = "conferindo" if chave else "esperando"
         # A aiowebostv dá só 10 s para aceitar o pedido na TV; para quem vai procurar o controle, 90 s.
         _wc.RECEIVE_TIMEOUT = 90
         cliente = WebOsClient(ip, client_key=chave)
@@ -283,26 +550,15 @@ async def parear(roteador):
                     macs.append(mac)
         except Exception:
             pass
-        modelo = (cliente.tv_info.system or {}).get("modelName")
-        gravar_privado(CHAVE, nova)
-        gravar_config({
+        guardar_tv_pareada(roteador, {
+            "marca": "lg",
+            "chave": nova,
             "tv_ip": ip,
             "tv_macs": macs or None,
-            "tv_modelo": modelo,
-            "roteador": roteador if roteador and MAC.fullmatch(str(roteador).lower()) else None,
+            "tv_modelo": (cliente.tv_info.system or {}).get("modelName"),
+            "roteador": roteador,
             "pareado_em": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
         })
-        await tv.descartar()
-        par.estado = "pareado"
-    except asyncio.TimeoutError:
-        par.estado, par.erro = "erro", "O tempo acabou antes de aceitar na TV. Tente de novo."
-    except Exception as e:
-        texto = str(e).lower()
-        if "denied" in texto or "reject" in texto or "cancel" in texto or "403" in texto:
-            par.estado, par.erro = "erro", "A TV recusou o pedido. Tente de novo e escolha Aceitar."
-        else:
-            logging.getLogger("pareamento").warning("falhou: %r", e)
-            par.estado, par.erro = "erro", "Não consegui conectar na TV."
     finally:
         _wc.RECEIVE_TIMEOUT = espera_original
         if cliente is not None:
@@ -310,6 +566,38 @@ async def parear(roteador):
                 await cliente.disconnect()
             except Exception:
                 pass
+
+
+async def parear_samsung(ip, info, roteador):
+    dados = samsung.dados_da_tv(ip, info)
+    salva = tv_salva(roteador) if roteador else None
+    mesma = (salva or {}).get("marca") == "samsung" and (salva or {}).get("id") == dados["id"]
+    token = chave_da(salva) if mesma else None
+    par.estado = "conferindo" if token else "esperando"
+
+    def esperando():
+        par.estado = "esperando"
+
+    async with aiohttp.ClientSession() as sessao:
+        ws, novo = await samsung.conectar(sessao, ip, token, espera_primeira=4, ao_esperar=esperando)
+        await ws.close()
+        if not novo:
+            raise RuntimeError("a TV não devolveu o token")
+        guardar_tv_pareada(roteador, {
+            **dados,
+            "chave": novo,
+            "roteador": roteador,
+            "pareado_em": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+        })
+        # Extra: com o Controle Remoto IP ligado na TV, um segundo "Permitir" libera a troca direta de entrada.
+        if await samsung.porta_ip_aberta(ip):
+            par.estado = "esperando_ip"
+            try:
+                token_ip = await samsung.parear_ip(sessao, ip)
+                if token_ip:
+                    atualizar_tv(roteador, {"chave_ip": token_ip})
+            except Exception as e:
+                logging.getLogger("pareamento").warning("Controle Remoto IP não pareou: %s", samsung.sem_segredo(repr(e)))
 
 
 async def parear_iniciar(req):
@@ -328,12 +616,27 @@ async def parear_estado(_req):
 
 
 async def procurar(_req):
-    ip = await achar_tv(procurar=True)
-    return web.json_response({"encontrada": ip is not None, "ip": ip, "pareado": ler_chave() is not None})
+    achada = await achar_qualquer_tv()
+    return web.json_response({"encontrada": achada is not None, "ip": achada and achada[1],
+                              "marca": achada and achada[0], "pareado": chave_da(tv_salva()) is not None})
+
+
+async def casa(req):
+    """O app avisa em que rede o Mac está (pelo roteador): define qual TV atender."""
+    global roteador_atual
+    try:
+        dados = await req.json()
+    except Exception:
+        dados = {}
+    r = str(dados.get("roteador") or "").lower()
+    if MAC.fullmatch(r) and r != roteador_atual:
+        logging.getLogger("casa").info("rede: roteador %s", r)
+        roteador_atual = r
+    return web.json_response({"ok": True, "tv": tv_salva() is not None})
 
 
 async def saude(_req):
-    return web.json_response({"ok": True, "pareado": ler_chave() is not None})
+    return web.json_response({"ok": True, "pareado": chave_da(tv_salva()) is not None})
 
 
 # MARK: estado e ações
@@ -379,15 +682,13 @@ def resumo(cliente):
 
 
 async def estado(_req):
-    try:
-        cliente = await tv.obter()
-    except Exception:
-        await tv.descartar()
-        cliente = None
-    if cliente is None:
-        return web.json_response({"online": False, "pareado": ler_chave() is not None,
-                                  "ligando": time.time() < tv.ligando_ate})
-    return web.json_response(resumo(cliente))
+    tv = gerente.tv()
+    if tv is None:
+        return web.json_response({"online": False, "pareado": False})
+    resposta = await tv.estado()
+    if resposta.get("online"):
+        resposta = marcar_console(resposta, console_da_rede())
+    return web.json_response(resposta)
 
 
 async def executar(cliente, acao, valor):
@@ -432,24 +733,25 @@ async def executar(cliente, acao, valor):
 async def acao(req):
     dados = await req.json()
     nome, valor = dados.get("acao"), dados.get("valor")
-    if nome == "ligar":
-        await asyncio.get_running_loop().run_in_executor(None, tv.ligar)
+    tv = gerente.tv()
+    if tv is None:
+        return web.json_response({"ok": False, "erro": "Nenhuma TV configurada nesta casa."}, status=409)
+    try:
+        if nome == "ligar":
+            await tv.ligar()
+        else:
+            await tv.agir(nome, valor)
         return web.json_response({"ok": True})
-    for tentativa in (1, 2):
-        cliente = await tv.obter()
-        if cliente is None:
-            return web.json_response({"ok": False, "erro": "A TV está desligada."}, status=409)
-        try:
-            await executar(cliente, nome, valor)
-            if nome == "desligar":
-                await tv.descartar()
-            return web.json_response({"ok": True})
-        except web.HTTPException:
-            raise
-        except Exception as e:
-            await tv.descartar()
-            if tentativa == 2:
-                return web.json_response({"ok": False, "erro": str(e)}, status=502)
+    except samsung.TVDesligada:
+        return web.json_response({"ok": False, "erro": "A TV está desligada."}, status=409)
+    except web.HTTPException:
+        raise
+    except (ValueError, TypeError) as e:
+        return web.json_response({"ok": False, "erro": samsung.sem_segredo(e)}, status=400)
+    except Exception as e:
+        # O detalhe (que pode trazer endereço e token) fica só no log, limpo; quem pediu recebe uma frase.
+        logging.getLogger("acao").warning("%s falhou: %s", nome, samsung.sem_segredo(repr(e)))
+        return web.json_response({"ok": False, "erro": "Não funcionou, tenta de novo"}, status=502)
 
 
 def buscar_youtube(termo):
@@ -483,15 +785,11 @@ async def youtube_busca(req):
 async def icone(req):
     app_id = req.match_info["app_id"]
     if app_id not in icones:
-        cliente = await tv.obter()
-        dados = (cliente.tv_state.apps or {}).get(app_id) if cliente else None
-        url = dados and (dados.get("largeIcon") or dados.get("icon"))
-        if not url:
+        tv = gerente.tv()
+        imagem = await tv.icone(app_id) if tv is not None else None
+        if not imagem:
             raise web.HTTPNotFound()
-        async with aiohttp.ClientSession() as s, s.get(url, timeout=aiohttp.ClientTimeout(total=5)) as r:
-            if r.status != 200:
-                raise web.HTTPNotFound()
-            icones[app_id] = await r.read()
+        icones[app_id] = imagem
     return web.Response(body=icones[app_id], content_type="image/png",
                         headers={"Cache-Control": "max-age=86400"})
 
@@ -513,6 +811,38 @@ async def vigiar_pai(app):
     app["vigia"] = asyncio.create_task(vigia())
 
 
+ROTAS_DO_MAC = ("/api/procurar", "/api/parear", "/api/casa")
+
+
+def host_confiavel(host):
+    """DNS rebinding: um site que aponta o próprio nome para este Mac chega com um domínio no Host.
+    Aqui só vale endereço IP, localhost ou o nome .local do Mac (o celular abre por um desses)."""
+    nome = urlsplit("//" + (host or "")).hostname or ""
+    if nome == "localhost" or nome.endswith(".local"):
+        return True
+    try:
+        ipaddress.ip_address(nome)
+        return True
+    except ValueError:
+        return False
+
+
+@web.middleware
+async def protecao(req, handler):
+    if not host_confiavel(req.host):
+        raise web.HTTPForbidden(text="endereço não permitido")
+    if req.method != "GET" or req.path in ROTAS_DO_MAC:
+        # CSRF: o navegador manda Origin quando outro site tenta postar aqui; tem de ser esta mesma página.
+        origem = req.headers.get("Origin")
+        if origem is not None and urlsplit(origem).netloc.lower() != req.host.lower():
+            raise web.HTTPForbidden(text="origem não permitida")
+        if req.headers.get("Sec-Fetch-Site") == "cross-site":
+            raise web.HTTPForbidden(text="origem não permitida")
+    if req.method == "POST" and not req.content_type.startswith("application/json"):
+        raise web.HTTPUnsupportedMediaType(text="só JSON")  # JSON obriga o navegador a pedir licença antes (CORS)
+    return await handler(req)
+
+
 def so_local(handler):
     """Pareamento e busca só pelo próprio Mac (o celular não precisa disso)."""
     async def interno(req):
@@ -523,7 +853,7 @@ def so_local(handler):
 
 
 def criar_app():
-    app = web.Application()
+    app = web.Application(middlewares=[protecao])
     app.on_startup.append(vigiar_pai)
     app.add_routes([
         web.get("/", pagina),
@@ -535,15 +865,16 @@ def criar_app():
         web.get("/api/procurar", so_local(procurar)),
         web.get("/api/parear", so_local(parear_estado)),
         web.post("/api/parear", so_local(parear_iniciar)),
+        web.post("/api/casa", so_local(casa)),
     ])
-    app.on_cleanup.append(lambda _a: tv.descartar())
+    app.on_cleanup.append(lambda _a: gerente.descartar())
     return app
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
     logging.getLogger("aiohttp.access").addFilter(
-        lambda r: not any(p in r.getMessage() for p in ("/api/estado", "/api/saude", "/api/parear", "/api/procurar"))
+        lambda r: not any(p in r.getMessage() for p in ("/api/estado", "/api/saude", "/api/parear", "/api/procurar", "/api/casa"))
         or "127.0.0.1" not in r.getMessage())
     web.run_app(criar_app(), host=["0.0.0.0", "::"], port=PORTA, print=lambda *_: None,
                 access_log_format='%a "%r" %s')

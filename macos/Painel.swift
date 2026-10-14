@@ -84,6 +84,7 @@ struct PainelTV: View {
 
     /// Luz ambiente: cores do ícone do app; TV ao vivo e entradas usam luz de tela azulada.
     private var coresDaLuz: [NSColor] {
+        if let console { return console.cores }
         if simboloTela != nil {
             return [NSColor(luzDeTela), NSColor(deviceRed: 0.3, green: 0.82, blue: 0.86, alpha: 1)]
         }
@@ -94,7 +95,21 @@ struct PainelTV: View {
 
     private var simboloTela: String? {  // TV ao vivo e entradas não têm ícone de app
         if appAtual == liveTV { return "antenna.radiowaves.left.and.right" }
-        if entradaAtual != nil { return "cable.connector" }
+        if entradaAtual != nil { return console?.simbolo ?? "cable.connector" }
+        return nil
+    }
+
+    /// Videogame na entrada (pelo nome que ela tem): o símbolo que o próprio macOS traz e a cor da marca na luz.
+    private var console: (simbolo: String, cores: [NSColor])? {
+        guard let nome = entradaAtual?.nome.lowercased() else { return nil }
+        if nome.contains("playstation") || nome.hasPrefix("ps") {
+            return ("playstation.logo", [NSColor(deviceRed: 0.05, green: 0.45, blue: 0.95, alpha: 1),
+                                         NSColor(deviceRed: 0.4, green: 0.68, blue: 1, alpha: 1)])
+        }
+        if nome.contains("xbox") {
+            return ("xbox.logo", [NSColor(deviceRed: 0.2, green: 0.78, blue: 0.2, alpha: 1),
+                                  NSColor(deviceRed: 0.6, green: 0.9, blue: 0.35, alpha: 1)])
+        }
         return nil
     }
 
@@ -162,13 +177,32 @@ struct PainelTV: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 7) {
                     Image(systemName: "tv").foregroundStyle(apagado)
-                    Text("TV LG").font(.system(size: 16, weight: .semibold))
+                    Text(e?.ehSamsung == true ? "TV Samsung" : "TV LG").font(.system(size: 16, weight: .semibold))
                 }
                 Text(subtitulo)
                     .font(.system(size: 12.5))
                     .foregroundStyle(ui.confirmarDesligar ? Color.red.opacity(0.9) : apagado)
             }
             Spacer()
+            if let console = e?.console {
+                let ativo = ligada && entradaAtual?.id == console.entrada
+                Button {
+                    c.acao("entrada", console.entrada)
+                    ui.secao = nil  // volta para a TV, que passa a mostrar o videogame
+                } label: {
+                    Image(systemName: console.simbolo)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(ativo ? destaque : Color(white: 0.85))
+                        .frame(width: 34, height: 34)
+                        .background(Circle().fill(ativo ? blocoAtivo : bloco))
+                        .overlay(Circle().stroke(ativo ? destaque.opacity(0.6) : borda))
+                }
+                .buttonStyle(.plain)
+                .disabled(!ligada)
+                .opacity(ligada ? 1 : 0.4)
+                .help(T("Ir para o %@", console.nome ?? "videogame"))
+                .padding(.trailing, 2)
+            }
             Button {
                 alternar(.youtube)
             } label: {
@@ -204,7 +238,7 @@ struct PainelTV: View {
     private var subtitulo: String {
         if ui.confirmarDesligar { return T("Toque de novo para desligar") }
         guard let e else { return T("Conectando ao controle…") }
-        if ligada { return T("Ligada · %@", tituloTela) }
+        if ligada { return tituloTela.isEmpty ? T("Ligada") : T("Ligada · %@", tituloTela) }
         return e.ligando == true ? T("Ligando…") : T("Desligada")
     }
 
@@ -276,7 +310,7 @@ struct PainelTV: View {
                   valor: entradaAtual?.nome ?? (appAtual == liveTV ? T("TV ao vivo") : T("Apps")),
                   aberto: ui.secao == .entradas, seta: true) { alternar(.entradas) }
             Bloco(simbolo: "square.grid.2x2", titulo: "App",
-                  valor: (entradaAtual == nil && appAtual != liveTV) ? tituloTela : "—",
+                  valor: (entradaAtual == nil && appAtual != liveTV && !tituloTela.isEmpty) ? tituloTela : "—",
                   aberto: ui.secao == .apps, seta: true) { alternar(.apps) }
             Bloco(simbolo: ui.pausado ? "play.fill" : "pause.fill", titulo: T("Mídia"),
                   valor: ui.pausado ? T("Continuar") : T("Pausar"), aberto: false, seta: false) {
@@ -304,11 +338,16 @@ struct PainelTV: View {
 
     private var gradeEntradas: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 104), spacing: 8)], spacing: 8) {
-            Chip(titulo: T("TV ao vivo"), ativo: appAtual == liveTV) { c.acao("app", liveTV) }
+            if e?.ao_vivo != false {
+                Chip(titulo: T("TV ao vivo"), ativo: appAtual == liveTV) { c.acao("app", liveTV) }
+            }
             ForEach(e?.entradas ?? []) { en in
                 Chip(titulo: en.nome, ativo: en.app == appAtual, ponto: en.conectado, fraco: !en.conectado) {
                     c.acao("entrada", en.id)
                 }
+            }
+            if e?.ehSamsung == true && e?.ao_vivo == false {  // sem o Controle Remoto IP: o menu de entradas da TV
+                Chip(titulo: T("Outras entradas"), ativo: false) { c.acao("botao", "SOURCE") }
             }
         }
     }
@@ -1163,8 +1202,17 @@ struct Atalho: View {
 }
 
 #if !TESTE_RENDER
+/// Abrir o app de novo (Finder, Dock, Spotlight) com ele já rodando chega aqui.
+final class Delegado: NSObject, NSApplicationDelegate {
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        MainActor.assumeIsolated { Controle.atual?.reaberto() }
+        return true
+    }
+}
+
 @main
 struct ControleTVApp: App {
+    @NSApplicationDelegateAdaptor(Delegado.self) private var delegado
     @StateObject private var c = Controle()
 
     var body: some Scene {

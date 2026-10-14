@@ -172,7 +172,7 @@ struct IlusRedeLocal: View {
                 .font(.system(size: 12.5, weight: .bold))
                 .multilineTextAlignment(.center)
                 .foregroundStyle(Color(white: 0.1))
-            Text(T("Para encontrar e controlar a TV LG na rede de casa."))
+            Text(T("Para encontrar e controlar a TV na rede de casa."))
                 .font(.system(size: 11))
                 .foregroundStyle(Color(white: 0.35))
                 .multilineTextAlignment(.center)
@@ -269,6 +269,7 @@ struct IlusLigarTV: View {
 
 struct IlusParear: View {
     let estado: String
+    var samsung = false
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 34) {
@@ -296,12 +297,12 @@ struct IlusParear: View {
                 .foregroundStyle(Color(white: 0.12))
                 .multilineTextAlignment(.center)
             HStack(spacing: 6) {
-                Text(T("Aceitar"))
+                Text(samsung ? T("Permitir") : T("Aceitar"))
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(width: 58, height: 18)
                     .background(RoundedRectangle(cornerRadius: 4).fill(Color(red: 0.75, green: 0.1, blue: 0.3)))
-                Text(T("Recusar"))
+                Text(samsung ? T("Negar") : T("Recusar"))
                     .font(.system(size: 9, weight: .medium))
                     .foregroundStyle(Color(white: 0.2))
                     .frame(width: 58, height: 18)
@@ -333,11 +334,18 @@ struct IlusInicio: View {
 }
 
 struct IlusOpcoesTV: View {
+    var samsung = false
+
     var body: some View {
         VStack(spacing: 8) {
-            linha("1", T("Rede"), "LG Connect Apps")
-            linha("2", T("Geral › Mobile TV On"), T("Ligar via Wi-Fi"))
-            linha("3", T("Geral"), T("Início Rápido+"))
+            if samsung {
+                linha("1", T("Geral › Rede › Configurações Especializadas"), T("Ligar com Dispositivo Móvel"))
+                linha("2", T("Na mesma tela (opcional)"), T("Controle Remoto IP"))
+            } else {
+                linha("1", T("Rede"), "LG Connect Apps")
+                linha("2", T("Geral › Mobile TV On"), T("Ligar via Wi-Fi"))
+                linha("3", T("Geral"), T("Início Rápido+"))
+            }
         }
         .frame(width: 440)
     }

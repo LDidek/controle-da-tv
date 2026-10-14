@@ -50,18 +50,52 @@ enum Versao {
     static var build: Int { Int(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "") ?? 0 }
 }
 
-/// config.json: quem grava é o servidor (no pareamento); o app só lê.
-struct ConfigCasa: Codable, Equatable {
+/// Uma TV, de uma casa (reconhecida pelo roteador).
+struct TVSalva: Codable, Equatable {
+    var marca: String?
+    var id: String?
     var tv_ip: String?
     var tv_macs: [String]?
     var tv_modelo: String?
+    var nome: String?
     var roteador: String?
     var pareado_em: String?
+    var chave: String?
+
+    var ehSamsung: Bool { marca == "samsung" }
+    /// A LG pareada antes das várias casas guarda a chave no arquivo client-key.
+    var pareada: Bool {
+        if let chave, !chave.isEmpty { return true }
+        return !ehSamsung && temChave()
+    }
+}
+
+/// config.json: quem grava é o servidor (no pareamento); o app só lê (e troca o roteador, ver gravarRoteador).
+/// Formato antigo: os campos de uma TV LG soltos no topo. Novo: {"tvs": [...]}, uma por casa.
+struct ConfigCasa: Equatable {
+    var tvs: [TVSalva] = []
+
+    private struct Arquivo: Decodable {
+        var tvs: [TVSalva]?
+        var tv_ip: String?
+        var tv_macs: [String]?
+        var tv_modelo: String?
+        var roteador: String?
+        var pareado_em: String?
+    }
 
     static func ler() -> ConfigCasa {
         guard let dados = try? Data(contentsOf: Caminhos.config),
-              let c = try? JSONDecoder().decode(ConfigCasa.self, from: dados) else { return ConfigCasa() }
-        return c
+              let a = try? JSONDecoder().decode(Arquivo.self, from: dados) else { return ConfigCasa() }
+        if let tvs = a.tvs { return ConfigCasa(tvs: tvs) }
+        guard a.tv_ip != nil || a.roteador != nil || a.tv_macs != nil else { return ConfigCasa() }
+        return ConfigCasa(tvs: [TVSalva(marca: "lg", tv_ip: a.tv_ip, tv_macs: a.tv_macs, tv_modelo: a.tv_modelo,
+                                        roteador: a.roteador, pareado_em: a.pareado_em)])
+    }
+
+    func tv(doRoteador mac: String?) -> TVSalva? {
+        guard let mac else { return nil }
+        return tvs.first { $0.roteador?.lowercased() == mac.lowercased() }
     }
 }
 
@@ -122,6 +156,9 @@ func girarLog(_ arquivo: String) {
 func criarPastaDeDados() {
     try? FileManager.default.createDirectory(at: Caminhos.dados, withIntermediateDirectories: true,
                                              attributes: [.posixPermissions: 0o700])
+    // Registros têm IP da TV e da rede de casa: só o dono do Mac lê.
+    try? FileManager.default.createDirectory(at: Caminhos.logs, withIntermediateDirectories: true)
+    try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: Caminhos.logs.path)
 }
 
 func executar(_ caminho: String, _ args: [String]) -> String {
@@ -240,7 +277,20 @@ private func tentarConexao(_ ip: String, _ numero: UInt16, espera: Double) async
     }
 }
 
-/// A TV responde na porta 3000 deste IP? (usado para reconhecer a casa se o roteador for trocado)
+/// Esta TV responde no IP salvo? (usado para reconhecer a casa se o roteador for trocado)
+/// A Samsung diz quem é (o id tem que bater); da LG basta a porta 3000 aberta.
+func tvResponde(_ tv: TVSalva) async -> Bool {
+    guard let ip = tv.tv_ip else { return false }
+    guard tv.ehSamsung else { return await tvRespondeEm(ip) }
+    var req = URLRequest(url: URL(string: "http://\(ip):8001/api/v2/")!)
+    req.timeoutInterval = 2
+    guard let (dados, _) = try? await URLSession.shared.data(for: req),
+          let json = try? JSONSerialization.jsonObject(with: dados) as? [String: Any] else { return false }
+    let aparelho = json["device"] as? [String: Any]
+    let ids = [json["id"] as? String, aparelho?["duid"] as? String]
+    return tv.id == nil || ids.contains(tv.id)
+}
+
 func tvRespondeEm(_ ip: String, espera: Double = 1.2) async -> Bool {
     await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
         let fila = DispatchQueue(label: "tv-porta")

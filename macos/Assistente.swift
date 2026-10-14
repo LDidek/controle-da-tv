@@ -48,6 +48,11 @@ final class Assistente: NSObject, ObservableObject, NSWindowDelegate {
     @Published var inicio: SMAppService.Status = SMAppService.mainApp.status
     @Published var marcos = Marcos.ler()
     @Published var configCompleta = Controle.lerConfigCompleta()
+    /// Conectando mais uma TV (de outra casa): os passos da TV valem para a rede atual, não para "alguma TV".
+    @Published private(set) var novaTV = false
+    @Published var tvDaRede = Controle.tvDaRedePareada()
+    @Published var marcaAchada: String?
+    private var opcoesNovaTV = false
 
     unowned let c: Controle
     private var janela: NSWindow?
@@ -68,11 +73,11 @@ final class Assistente: NSObject, ObservableObject, NSWindowDelegate {
         case .mover: return noLugar
         case .motor: return motorPronto
         case .redeLocal: return rede == .liberada
-        case .tv: return configCompleta || tvIP != nil
-        case .parear: return configCompleta
+        case .tv: return (novaTV ? tvDaRede : configCompleta) || tvIP != nil
+        case .parear: return novaTV ? tvDaRede : configCompleta
         case .inicio: return inicio == .enabled
-        case .opcoesTV: return marcos.opcoesTV
-        case .pronto: return marcos.concluido
+        case .opcoesTV: return novaTV ? opcoesNovaTV : marcos.opcoesTV
+        case .pronto: return novaTV ? false : marcos.concluido
         }
     }
 
@@ -92,7 +97,21 @@ final class Assistente: NSObject, ObservableObject, NSWindowDelegate {
 
     // MARK: janela
 
-    func abrir(em alvo: Passo? = nil) {
+    /// LG ou Samsung: a que o assistente achou, a da rede atual ou a que o painel mostra.
+    var ehSamsung: Bool {
+        let marca = marcaAchada ?? ConfigCasa.ler().tv(doRoteador: macDoRoteador())?.marca ?? c.estado?.marca
+        return marca == "samsung"
+    }
+
+    func abrir(em alvo: Passo? = nil, novaTV nova: Bool = false) {
+        if nova && !novaTV {
+            novaTV = true
+            opcoesNovaTV = false
+            tvIP = nil
+            marcaAchada = nil
+            pareamento = "parado"
+            registrar("assistente: conectar outra TV")
+        }
         recarregar()
         // Reabre no primeiro item que realmente falta (a lista do Controle já sabe da Rede Local).
         let falta = c.pendencias.min { $0.rawValue < $1.rawValue }
@@ -128,6 +147,7 @@ final class Assistente: NSObject, ObservableObject, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         aberto = false
+        novaTV = false
         vigia?.cancel()
         vigia = nil
         // Solta a janela inteira: escondida, ela continuaria animando o anel pulsante e gastando CPU.
@@ -163,6 +183,7 @@ final class Assistente: NSObject, ObservableObject, NSWindowDelegate {
         inicio = SMAppService.mainApp.status
         marcos = Marcos.ler()
         configCompleta = Controle.lerConfigCompleta()
+        tvDaRede = Controle.tvDaRedePareada()
     }
 
     /// Confere o passo da tela a cada 2 s (a pessoa pode estar liberando algo nos Ajustes).
@@ -193,7 +214,7 @@ final class Assistente: NSObject, ObservableObject, NSWindowDelegate {
         case .tv:
             if !feito(.tv) { await procurarTV() }
         case .parear:
-            if ["procurando", "conferindo", "esperando"].contains(pareamento) { await lerPareamento() }
+            if ["procurando", "conferindo", "esperando", "esperando_ip"].contains(pareamento) { await lerPareamento() }
         default:
             break
         }
@@ -227,17 +248,27 @@ final class Assistente: NSObject, ObservableObject, NSWindowDelegate {
         case .tv:
             if feito(.tv) { avancar() } else { Task { await procurarTV() } }
         case .parear:
-            if configCompleta { avancar() } else { parear() }
+            if feito(.parear) && pareamento != "erro" { avancar() } else { parear() }
         case .inicio:
             if inicio == .enabled { avancar() } else if inicio == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
             else { ativarInicio() }
         case .opcoesTV:
-            marcos.opcoesTV = true
-            marcos.gravar()
+            if novaTV {
+                opcoesNovaTV = true
+            } else {
+                marcos.opcoesTV = true
+                marcos.gravar()
+            }
             avancar()
         case .pronto:
             concluir()
         }
+    }
+
+    /// Samsung: depois de ligar o Controle Remoto IP na TV, pareia de novo (só ele pede outro "Permitir").
+    func conectarDeNovo() {
+        irPara(.parear)
+        parear()
     }
 
     func moverParaAplicativos() {
@@ -327,8 +358,8 @@ final class Assistente: NSObject, ObservableObject, NSWindowDelegate {
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork")!)
     }
 
-    private struct RespostaProcura: Decodable { let encontrada: Bool; let ip: String? }
-    private struct RespostaPareamento: Decodable { let estado: String; let erro: String? }
+    private struct RespostaProcura: Decodable { let encontrada: Bool; let ip: String?; var marca: String? }
+    private struct RespostaPareamento: Decodable { let estado: String; let erro: String?; var marca: String? }
 
     func procurarTV() async {
         guard motorPronto, !tvProcurando else { return }
@@ -340,7 +371,8 @@ final class Assistente: NSObject, ObservableObject, NSWindowDelegate {
         if let (dados, _) = try? await URLSession.shared.data(for: req),
            let r = try? JSONDecoder().decode(RespostaProcura.self, from: dados) {
             let ip = r.encontrada ? r.ip : nil
-            if ip != tvIP { tvIP = ip; registrar("procura da TV: \(ip ?? "não achou")") }
+            if r.encontrada, let marca = r.marca { marcaAchada = marca }
+            if ip != tvIP { tvIP = ip; registrar("procura da TV: \(ip ?? "não achou") \(r.marca ?? "")") }
         }
     }
 
@@ -360,6 +392,7 @@ final class Assistente: NSObject, ObservableObject, NSWindowDelegate {
                    let r = try? JSONDecoder().decode(RespostaPareamento.self, from: dados) {
                     pareamento = r.estado
                     pareamentoErro = r.erro
+                    if let marca = r.marca { marcaAchada = marca }
                     registrar("pareamento: \(r.estado)")
                     return
                 }
@@ -378,8 +411,10 @@ final class Assistente: NSObject, ObservableObject, NSWindowDelegate {
         if r.estado != pareamento { registrar("pareamento: \(r.estado) \(r.erro ?? "")") }
         pareamento = r.estado
         pareamentoErro = r.erro
+        if let marca = r.marca { marcaAchada = marca }
         if r.estado == "pareado" {
             configCompleta = Controle.lerConfigCompleta()
+            tvDaRede = Controle.tvDaRedePareada()
             c.configCompleta = configCompleta
             c.checarRede()
         }
@@ -393,6 +428,7 @@ final class Assistente: NSObject, ObservableObject, NSWindowDelegate {
     }
 
     func concluir() {
+        if novaTV { fechar(); return }
         marcos.concluido = true
         marcos.gravar()
         fechar()
@@ -576,7 +612,20 @@ struct PaginaPasso: View {
             if a.feito(.tv) {
                 t = T("Achei a TV!\n\nClique no botão azul **Continuar**.")
             } else {
-                t = T("Agora ligue a TV pelo controle remoto, do jeito de sempre (o botão vermelho, lá em cima no controle).\n\nEspere aparecer a imagem na TV. Eu procuro a TV sozinho e aviso aqui embaixo quando encontrar.")
+                t = T("Agora ligue a TV pelo controle remoto, do jeito de sempre (o botão de ligar, lá em cima no controle).\n\nEspere aparecer a imagem na TV. Eu procuro a TV sozinho e aviso aqui embaixo quando encontrar.")
+            }
+        case .parear where a.ehSamsung:
+            switch a.pareamento {
+            case "esperando":
+                t = T("Olhe para a TV: apareceu um aviso na tela.\n\nCom as setas do controle remoto, escolha **Permitir** e aperte o botão do meio. Seja rápido: o aviso some em 30 segundos.")
+            case "esperando_ip":
+                t = T("Apareceu mais um aviso na TV, agora do **Controle Remoto IP**.\n\nEscolha **Permitir** de novo e aperte o botão do meio. Nunca escolha Negar: duas recusas bloqueiam o computador.")
+            case "erro":
+                t = T("Não deu certo desta vez, mas está tudo bem.\n\nClique em **Tentar de novo**. Quando aparecer o aviso na TV, escolha **Permitir** no controle remoto.")
+            default:
+                t = a.feito(.parear)
+                    ? T("A TV e o computador já se conhecem.\n\nClique no botão azul **Continuar**.")
+                    : T("Agora vamos apresentar o computador à TV. Isso só acontece desta vez.\n\n1. Clique no botão azul **Conectar**.\n2. Olhe para a TV: vai aparecer um aviso.\n3. Com as setas do controle, escolha **Permitir** e aperte o botão do meio.")
             }
         case .parear:
             switch a.pareamento {
@@ -585,7 +634,7 @@ struct PaginaPasso: View {
             case "erro":
                 t = T("Não deu certo desta vez, mas está tudo bem.\n\nClique em **Tentar de novo**. Quando aparecer o aviso na TV, aperte **OK** no controle remoto.")
             default:
-                t = (a.configCompleta)
+                t = a.feito(.parear)
                     ? T("A TV e o computador já se conhecem.\n\nClique no botão azul **Continuar**.")
                     : T("Agora vamos apresentar o computador à TV. Isso só acontece desta vez.\n\n1. Clique no botão azul **Conectar**.\n2. Olhe para a TV: vai aparecer um aviso.\n3. No controle remoto, aperte o botão **OK** (o do meio) para aceitar.")
             }
@@ -598,6 +647,10 @@ struct PaginaPasso: View {
             default:
                 t = T("Para o controle estar sempre pronto, ele vai abrir sozinho toda vez que o computador ligar.\n\nClique no botão azul **Ativar**. Pode aparecer um aviso no canto da tela dizendo que um item foi adicionado: é normal.")
             }
+        case .opcoesTV where a.ehSamsung:
+            t = a.c.estado?.ao_vivo == true
+                ? T("Para o computador conseguir **ligar** a TV, a opção **Ligar com Dispositivo Móvel** precisa estar ligada no menu da TV, em **Configurações › Geral › Rede › Configurações Especializadas**.\n\nO **Controle Remoto IP** já está conectado: o computador escolhe a entrada (HDMI 1, 2…) direto.")
+                : T("Para o computador conseguir **ligar** a TV, a opção **Ligar com Dispositivo Móvel** precisa estar ligada no menu da TV, em **Configurações › Geral › Rede › Configurações Especializadas**.\n\nNa mesma tela, **Controle Remoto IP** é opcional: com ele, o computador escolhe a entrada (HDMI 1, 2…) direto. Se ligar essa opção agora, clique em **Conectar de novo** e escolha Permitir na TV.")
         case .opcoesTV:
             t = T("Para o computador conseguir **ligar** a TV, estas três opções precisam estar ligadas no menu da TV.\n\nNesta TV elas **já estão ligadas**. Você não precisa mexer em nada: é só clicar em **Já está tudo certo**.")
         case .pronto:
@@ -628,13 +681,16 @@ struct PaginaPasso: View {
             }
         case .tv:
             if !a.motorPronto { return .erro(T("Primeiro termine o passo 2 (Preparar).")) }
-            if a.configCompleta { return .ok(T("A TV já está configurada.")) }
+            if a.feito(.parear) { return .ok(T("A TV já está configurada.")) }
             if a.tvIP != nil { return .ok(T("TV encontrada.")) }
             return .girando(T("Procurando a TV… (ligue a TV pelo controle remoto)"))
         case .parear:
-            if a.configCompleta && a.pareamento != "erro" { return .ok(T("Conectado à TV.")) }
+            if a.feito(.parear) && !["erro", "procurando", "conferindo", "esperando", "esperando_ip"].contains(a.pareamento) {
+                return .ok(T("Conectado à TV."))
+            }
             switch a.pareamento {
             case "procurando", "conferindo": return .girando(T("Falando com a TV…"))
+            case "esperando" where a.ehSamsung, "esperando_ip": return .girando(T("Esperando você escolher Permitir na TV…"))
             case "esperando": return .girando(T("Esperando você apertar OK no controle da TV…"))
             case "erro": return .erro(T(a.pareamentoErro ?? "Não deu certo. Tente de novo."))
             default: return nil
@@ -662,10 +718,10 @@ struct PaginaPasso: View {
             }
         case .tv: return a.feito(.tv) ? (T("Continuar"), true) : (T("Procurar de novo"), a.motorPronto && !a.tvProcurando)
         case .parear:
-            if a.configCompleta && a.pareamento != "erro" { return (T("Continuar"), true) }
             switch a.pareamento {
-            case "procurando", "conferindo", "esperando": return (T("Aguardando…"), false)
+            case "procurando", "conferindo", "esperando", "esperando_ip": return (T("Aguardando…"), false)
             case "erro": return (T("Tentar de novo"), a.motorPronto)
+            case _ where a.feito(.parear): return (T("Continuar"), true)
             default: return (T("Conectar"), a.motorPronto)
             }
         case .inicio:
@@ -686,6 +742,8 @@ struct PaginaPasso: View {
             return [(T("Continuar mesmo assim"), { a.avancar() })]
         case .redeLocal where a.rede == .verificando:
             return [(T("Abrir Ajustes"), { a.abrirAjustesRede() })]
+        case .opcoesTV where a.ehSamsung && a.c.estado?.ao_vivo != true && a.feito(.parear):
+            return [(T("Conectar de novo"), { a.conectarDeNovo() })]
         default:
             return []
         }
@@ -699,9 +757,11 @@ struct PaginaPasso: View {
         case .motor: IlusMotor(etapa: a.motorPronto ? 3 : a.motorEtapa, erro: a.motorErro != nil)
         case .redeLocal: IlusRedeLocal(situacao: a.rede)
         case .tv: IlusLigarTV(achada: a.feito(.tv))
-        case .parear: IlusParear(estado: a.configCompleta && a.pareamento != "erro" ? "pareado" : a.pareamento)
+        case .parear:
+            IlusParear(estado: a.feito(.parear) && ["parado", "pareado"].contains(a.pareamento) ? "pareado" : a.pareamento,
+                       samsung: a.ehSamsung)
         case .inicio: IlusInicio(ativado: a.inicio == .enabled)
-        case .opcoesTV: IlusOpcoesTV()
+        case .opcoesTV: IlusOpcoesTV(samsung: a.ehSamsung)
         case .pronto: IlusPronto()
         }
     }

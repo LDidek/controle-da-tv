@@ -11,16 +11,16 @@ pub = pathlib.Path(pub)
 HOJE = datetime.date.today().isoformat()
 IDIOMAS = {
     "pt": {"hreflang": "pt-BR", "locale": "pt_BR",
-           "titulo": "Controle da TV · controle remoto da TV LG pelo Mac, fácil para idosos",
-           "descricao": "App gratuito para Mac que liga, desliga e controla a TV LG (webOS): volume, entradas, Netflix, YouTube e Globoplay. Configuração passo a passo com letras grandes, pensada para idosos. Código aberto.",
+           "titulo": "Controle da TV · controle remoto da TV LG ou Samsung pelo Mac, fácil para idosos",
+           "descricao": "App gratuito para Mac que liga, desliga e controla a TV LG (webOS) ou Samsung (Tizen): volume, entradas, Netflix, YouTube e Globoplay. Configuração passo a passo com letras grandes, pensada para idosos. Código aberto.",
            "nome_idioma": "Português"},
     "en": {"hreflang": "en", "locale": "en_US",
-           "titulo": "Controle da TV · LG TV remote for Mac, easy for older adults",
-           "descricao": "Free Mac app that turns an LG webOS TV on and off and controls volume, inputs, Netflix and YouTube from the menu bar. Large text and a calm step-by-step setup designed for seniors. Open source.",
+           "titulo": "Controle da TV · LG or Samsung TV remote for Mac, easy for older adults",
+           "descricao": "Free Mac app that turns an LG (webOS) or Samsung (Tizen) TV on and off and controls volume, inputs, Netflix and YouTube from the menu bar. Large text and a calm step-by-step setup designed for seniors. Open source.",
            "nome_idioma": "English"},
     "es": {"hreflang": "es", "locale": "es_ES",
-           "titulo": "Controle da TV · control remoto de la TV LG desde el Mac, fácil para personas mayores",
-           "descricao": "App gratuita para Mac que enciende, apaga y controla la TV LG (webOS): volumen, entradas, Netflix y YouTube desde la barra de menús. Letras grandes y configuración paso a paso pensada para personas mayores. Código abierto.",
+           "titulo": "Controle da TV · control remoto de la TV LG o Samsung desde el Mac, fácil para personas mayores",
+           "descricao": "App gratuita para Mac que enciende, apaga y controla la TV LG (webOS) o Samsung (Tizen): volumen, entradas, Netflix y YouTube desde la barra de menús. Letras grandes y configuración paso a paso pensada para personas mayores. Código abierto.",
            "nome_idioma": "Español"},
 }
 URL = {l: f"{SITE}/{l}/" for l in IDIOMAS}
@@ -41,7 +41,7 @@ def app_jsonld(l):
         "image": f"{SITE}/og.png", "screenshot": f"{SITE}/og.png",
         "author": {"@type": "Person", "name": AUTOR, "url": REPO.rsplit("/", 1)[0]},
         "audience": {"@type": "PeopleAudience", "audienceType": "Older adults and their families"},
-        "featureList": ["Turn LG TV on and off (Wake-on-LAN)", "Volume and mute", "Switch inputs (HDMI, live TV)",
+        "featureList": ["Turn LG (webOS) and Samsung (Tizen) TVs on and off", "Volume and mute", "Switch inputs (HDMI, live TV)",
                         "Open TV apps (Netflix, YouTube, Globoplay, Prime Video, Disney+)",
                         "YouTube search from the Mac keyboard", "Phone remote page on the same Wi-Fi",
                         "Step-by-step setup with drawings for older adults", "Signed automatic updates"],
@@ -138,34 +138,36 @@ robos = ["*", "Googlebot", "Bingbot", "GPTBot", "OAI-SearchBot", "ChatGPT-User",
 
 (pub / "llms.txt").write_text(f"""# Controle da TV
 
-> Free, open-source macOS menu bar app that works as a remote control for LG webOS TVs. It was designed to be easy for older adults (seniors, elderly parents and grandparents) and for the family members who set it up for them. Available in Portuguese, English and Spanish.
+> Free, open-source macOS menu bar app that works as a remote control for LG webOS and Samsung Tizen TVs. It was designed to be easy for older adults (seniors, elderly parents and grandparents) and for the family members who set it up for them. Available in Portuguese, English and Spanish.
 
 ## Key facts
 
-- What it does: turns an LG webOS TV on and off (Wake-on-LAN), volume and mute, input switching (HDMI, live TV), opens TV apps (Netflix, YouTube, Globoplay, Prime Video, Disney+), YouTube search from the Mac keyboard, arrow/OK/Back/Home keys, and a phone remote page for any device on the same Wi-Fi.
+- What it does: turns an LG (webOS) or Samsung (Tizen) TV on and off, volume and mute, input switching (HDMI, live TV), opens TV apps (Netflix, YouTube, Globoplay, Prime Video, Disney+), YouTube search from the Mac keyboard, arrow/OK/Back/Home keys, and a phone remote page for any device on the same Wi-Fi.
 - Made for older adults: large text, one step per screen with drawings, the setup never changes screens by itself, double-clicks don't skip steps, turning the TV off asks for confirmation, no account or password, automatic updates, and it shows who to call for help.
-- Compatible TVs: LG TVs running webOS (generally LG smart TVs from 2014 onward). Tested on the LG 50UK6510PSF (2018, webOS 4.4). TVs from other brands are not supported.
+- Compatible TVs: LG TVs running webOS (generally LG smart TVs from 2014 onward), tested on the LG 50UK6510PSF (2018, webOS 4.4); and Samsung TVs running Tizen (generally Samsung smart TVs from 2016 onward), tested on the Samsung QN55QN85BAGXZD (Neo QLED QN85B, 2022). Other LG and Samsung models should work but were not tested. TVs from other brands are not supported.
+- Samsung setup: for the Mac to turn the TV on, enable Settings > General > Network > Expert Settings > Power On with Mobile. Optional, on the same screen: IP Remote, which lets the app switch inputs directly (HDMI 1 to 4, live TV) and show the current input. The first time, the TV asks for permission on screen (choose Allow within 30 seconds).
+- One TV per home: the same Mac can control the TV at home and, for example, the one at the parents' house; the app recognizes each home by its router.
 - Requirements: a Mac with Apple silicon (M1 or newer) running macOS 14 or newer; Mac and TV on the same home network; internet on first launch (about 50 MB of components).
-- Price: free. License: MIT. Current version: {VERSAO}. Author: {AUTOR} (independent project, not affiliated with LG Electronics).
+- Price: free. License: MIT. Current version: {VERSAO}. Author: {AUTOR} (independent project, not affiliated with LG Electronics or Samsung Electronics).
 - Privacy: no account, no sign-up, no data collection; the Mac talks to the TV inside the home network. The internet is used only for components, update checks and YouTube searches.
 - How to install: download the DMG from {SITE}/ControleDaTV.dmg and drag the app to Applications (first launch needs "Open Anyway" in System Settings > Privacy & Security), or run `curl -fsSL {SITE}/instalar.sh | bash` in Terminal.
 
 ## Pages
 
 - [Website (detects the visitor's language)]({URL_RAIZ})
-- [Português]({URL['pt']}): controle remoto da TV LG pelo Mac, fácil para idosos
-- [English]({URL['en']}): LG TV remote for Mac, easy for older adults
-- [Español]({URL['es']}): control remoto de la TV LG desde el Mac, fácil para personas mayores
+- [Português]({URL['pt']}): controle remoto da TV LG ou Samsung pelo Mac, fácil para idosos
+- [English]({URL['en']}): LG or Samsung TV remote for Mac, easy for older adults
+- [Español]({URL['es']}): control remoto de la TV LG o Samsung desde el Mac, fácil para personas mayores
 - [Download (DMG)]({SITE}/ControleDaTV.dmg)
 - [Terms of use (PT/EN/ES)]({SITE}/termos)
 - [Source code on GitHub]({REPO})
 
 ## Resumo em português
 
-Controle da TV é um app gratuito e de código aberto para Mac que funciona como controle remoto da TV LG (webOS): liga e desliga a TV, muda o volume, troca a entrada, abre Netflix, YouTube e Globoplay e busca no YouTube pelo teclado do Mac. Foi feito para idosos e para os filhos e netos que configuram para eles: letras grandes, configuração passo a passo com desenhos, sem conta e com atualização automática. Testado na LG 50UK6510PSF. Sem vínculo com a LG.
+Controle da TV é um app gratuito e de código aberto para Mac que funciona como controle remoto da TV LG (webOS) ou Samsung (Tizen): liga e desliga a TV, muda o volume, troca a entrada, abre Netflix, YouTube e Globoplay e busca no YouTube pelo teclado do Mac. Foi feito para idosos e para os filhos e netos que configuram para eles: letras grandes, configuração passo a passo com desenhos, sem conta e com atualização automática. Testado na LG 50UK6510PSF e na Samsung QN55QN85BAGXZD. Sem vínculo com a LG nem com a Samsung.
 
 ## Resumen en español
 
-Controle da TV es una app gratuita y de código abierto para Mac que funciona como control remoto de la TV LG (webOS): enciende y apaga la TV, cambia el volumen y la entrada, abre Netflix y YouTube y busca en YouTube con el teclado del Mac. Está hecha para personas mayores y para los hijos y nietos que se la configuran: letras grandes, configuración paso a paso con dibujos, sin cuenta y con actualización automática. Probada en la LG 50UK6510PSF. Sin vínculo con LG.
+Controle da TV es una app gratuita y de código abierto para Mac que funciona como control remoto de la TV LG (webOS) o Samsung (Tizen): enciende y apaga la TV, cambia el volumen y la entrada, abre Netflix y YouTube y busca en YouTube con el teclado del Mac. Está hecha para personas mayores y para los hijos y nietos que se la configuran: letras grandes, configuración paso a paso con dibujos, sin cuenta y con actualización automática. Probada en la LG 50UK6510PSF y en la Samsung QN55QN85BAGXZD. Sin vínculo con LG ni con Samsung.
 """, encoding="utf-8")
 print("seo ok: raiz, /pt/, /en/, /es/, sitemap.xml, robots.txt, llms.txt")
