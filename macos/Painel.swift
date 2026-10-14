@@ -68,6 +68,9 @@ struct PainelTV: View {
     private var online: Bool { e?.online == true }
     private var ligada: Bool { online && e?.ligada == true }
     private var appAtual: String { e?.app_atual ?? "" }
+    /// Roku em "Limitado": o painel só mostra o estado e explica como liberar; nenhum botão manda nada.
+    private var travada: Bool { e?.limitada == true }
+    private var semVolumeExato: Bool { e?.volume_exato == false }
     private var entradaAtual: EntradaTV? { e?.entradas?.first { $0.app == appAtual } }
     private var infoApp: AppTV? { e?.apps?.first { $0.id == appAtual } }
 
@@ -116,10 +119,13 @@ struct PainelTV: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             cabecalho
+            if let tvs = e?.tvs, tvs.count > 1 { seletorDeTVs(tvs) }
             // A janela da barra não cresce direito depois de aberta: a seção escolhida (apps,
             // entradas, setas) ocupa o lugar da ilustração e o painel mantém sempre o mesmo tamanho.
             Group {
-                if ligada, let secao = ui.secao {
+                if travada {
+                    avisoLiberar
+                } else if ligada, let secao = ui.secao {
                     conteudo(secao)
                 } else {
                     TelaTV(ligada: ligada, ligando: e?.ligando == true, appId: appAtual, titulo: tituloTela,
@@ -133,9 +139,9 @@ struct PainelTV: View {
                 controleVolume
                 blocos
             }
-            .saturation(ligada ? 1 : 0)
-            .opacity(ligada ? 1 : 0.4)
-            .allowsHitTesting(ligada)
+            .saturation(ligada && !travada ? 1 : 0)
+            .opacity(ligada && !travada ? 1 : 0.4)
+            .allowsHitTesting(ligada && !travada)
             .animation(.easeInOut(duration: 0.45), value: ligada)
             rodape
         }
@@ -177,7 +183,7 @@ struct PainelTV: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 7) {
                     Image(systemName: "tv").foregroundStyle(apagado)
-                    Text(e?.ehSamsung == true ? "TV Samsung" : "TV LG").font(.system(size: 16, weight: .semibold))
+                    Text(e?.titulo ?? "TV LG").font(.system(size: 16, weight: .semibold)).lineLimit(1)
                 }
                 Text(subtitulo)
                     .font(.system(size: 12.5))
@@ -198,8 +204,8 @@ struct PainelTV: View {
                         .overlay(Circle().stroke(ativo ? destaque.opacity(0.6) : borda))
                 }
                 .buttonStyle(.plain)
-                .disabled(!ligada)
-                .opacity(ligada ? 1 : 0.4)
+                .disabled(!ligada || travada)
+                .opacity(ligada && !travada ? 1 : 0.4)
                 .help(T("Ir para o %@", console.nome ?? "videogame"))
                 .padding(.trailing, 2)
             }
@@ -217,8 +223,8 @@ struct PainelTV: View {
                 .overlay(Capsule().stroke(ui.secao == .youtube ? destaque.opacity(0.6) : borda))
             }
             .buttonStyle(.plain)
-            .disabled(!ligada)
-            .opacity(ligada ? 1 : 0.4)
+            .disabled(!ligada || travada)
+            .opacity(ligada && !travada ? 1 : 0.4)
             .padding(.trailing, 6)
             Button(action: power) {
                 Image(systemName: "power")
@@ -231,6 +237,8 @@ struct PainelTV: View {
                     .animation(.easeInOut(duration: 0.3), value: ligada)
             }
             .buttonStyle(.plain)
+            .disabled(travada)
+            .opacity(travada ? 0.4 : 1)
             .help(ligada ? T("Desligar a TV") : T("Ligar a TV"))
         }
     }
@@ -266,7 +274,7 @@ struct PainelTV: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center) {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text("\(Int(ui.volume))")
+                    Text(semVolumeExato ? "–" : "\(Int(ui.volume))")
                         .font(.system(size: 54, weight: .light))
                         .monospacedDigit()
                         .contentTransition(.numericText())
@@ -283,8 +291,15 @@ struct PainelTV: View {
                     ui.volume = max(0, ui.volume - 1)
                     c.acao("volume_menos")
                 }
-                SliderVolume(valor: $ui.volume, arrastando: $ui.arrastando, maximo: volumeMaximo) {
-                    c.acao("volume", numero: Int(ui.volume))
+                if semVolumeExato {  // a Roku não diz o nível: só sobe e desce
+                    Text(T("Esta TV só aumenta e diminui"))
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(apagado)
+                        .frame(maxWidth: .infinity)
+                } else {
+                    SliderVolume(valor: $ui.volume, arrastando: $ui.arrastando, maximo: volumeMaximo) {
+                        c.acao("volume", numero: Int(ui.volume))
+                    }
                 }
                 BotaoRedondo(simbolo: "plus") {
                     ui.volume = min(100, ui.volume + 1)
@@ -299,7 +314,83 @@ struct PainelTV: View {
             .font(.system(size: 11))
             .foregroundStyle(apagado)
             .padding(.horizontal, 58)
+            .opacity(semVolumeExato ? 0 : 1)
         }
+    }
+
+    // MARK: várias TVs na casa
+
+    /// Só com duas TVs ou mais: um toque troca a TV controlada; o botão direito acha, renomeia ou esquece.
+    private func seletorDeTVs(_ tvs: [TVNaCasa]) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(tvs) { tv in
+                    let ativa = tv.escolhida == true
+                    Button {
+                        if !ativa { ui.secao = nil; c.tv(["id": tv.id]) }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Circle().fill(tv.ligada == true ? Color.green.opacity(0.85) : apagado.opacity(0.6))
+                                .frame(width: 6, height: 6)
+                            Text(tv.nome).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                        }
+                        .foregroundStyle(ativa ? destaque : Color(white: 0.9))
+                        .padding(.horizontal, 12)
+                        .frame(height: 30)
+                        .background(Capsule().fill(ativa ? blocoAtivo : bloco))
+                        .overlay(Capsule().stroke(ativa ? destaque.opacity(0.6) : borda))
+                    }
+                    .buttonStyle(.plain)
+                    .help(ativa ? T("Esta é a TV que o controle está usando") : T("Controlar a TV %@", tv.nome))
+                    .contextMenu {
+                        if ativa {
+                            Button(T("Qual é esta TV?")) { c.acao("identificar") }
+                        } else {
+                            Button(T("Controlar esta TV")) { c.tv(["id": tv.id]) }
+                        }
+                        Button(T("Renomear…")) { c.renomearTV(tv) }
+                        Divider()
+                        Button(T("Esquecer esta TV")) { c.tv(["id": tv.id, "esquecer": true]) }
+                    }
+                }
+                Button { c.acao("identificar") } label: {
+                    Image(systemName: "speaker.wave.2")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Color(white: 0.85))
+                        .frame(width: 30, height: 30)
+                        .background(Circle().fill(bloco))
+                        .overlay(Circle().stroke(borda))
+                }
+                .buttonStyle(.plain)
+                .disabled(!ligada || travada)
+                .opacity(ligada && !travada ? 1 : 0.4)
+                .help(T("Qual é esta TV? O som dela some por 2 segundos"))
+            }
+        }
+    }
+
+    /// Roku em "Limitado": o caminho no menu da TV, para fazer uma vez com o controle físico.
+    private var avisoLiberar: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Image(systemName: "lock.shield")
+                .font(.system(size: 30, weight: .light))
+                .foregroundStyle(destaque)
+            Text(T("Esta TV ainda não aceita comandos pela rede"))
+                .font(.system(size: 16, weight: .semibold))
+            Text(T("Uma vez só, com o controle da TV, num momento em que ninguém esteja assistindo:"))
+                .font(.system(size: 13))
+                .foregroundStyle(Color(white: 0.85))
+            Text(T(e?.liberar ?? "Configurações › Sistema › Configurações avançadas do sistema › Controle por aplicativos móveis › Acesso à rede › Ativado"))
+                .font(.system(size: 13, weight: .semibold))
+                .fixedSize(horizontal: false, vertical: true)
+            Text(T("Enquanto isso, nada daqui aparece na tela dela."))
+                .font(.system(size: 12.5))
+                .foregroundStyle(apagado)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 16).fill(bloco))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(destaque.opacity(0.5)))
     }
 
     // MARK: blocos
@@ -619,6 +710,7 @@ struct PainelTV: View {
                     NSPasteboard.general.setString(c.linkCelular, forType: .string)
                 }
                 Divider()
+                Button(T("Conectar outra TV desta casa…")) { c.assistente.abrir(em: .tv, novaTV: true, mesmaCasa: true) }
                 Button(T("Configurar de novo…")) { c.assistente.abrir(em: c.pendencias.first ?? .mover) }
                 Button(T("Procurar atualização")) { Task { await at.verificar(manual: true) } }
                 Button(T("Termos de uso")) { NSWorkspace.shared.open(Ajustes.termos) }

@@ -139,6 +139,18 @@ input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border-radius: 
 .canal button { height: 44px; border-radius: 14px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 14px; }
 .canal span { color: var(--muted); font-size: 13px; min-width: 64px; text-align: center; }
 
+/* várias TVs na casa: o seletor só aparece com duas ou mais */
+.tvs { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.tvs[hidden] { display: none; }
+.tvs .chips { flex: 1 1 240px; min-width: 0; }
+.tvs .chip { white-space: nowrap; }
+.tvs .chip .mini.off { background: var(--muted); }
+.tvs-acoes { display: flex; gap: 8px; }
+.liberar { border-color: var(--accent); }
+.liberar p { margin: 0 0 8px; }
+.liberar .caminho { font-weight: 650; }
+.liberar .nota { color: var(--muted); font-size: 13px; margin: 0; }
+body.limitada .controle, body.limitada #power, body.limitada #ligar { opacity: .35; pointer-events: none; }
 /* entradas */
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip {
@@ -245,9 +257,23 @@ details[open] > summary svg { transform: rotate(180deg); }
   </div>
   <button class="power" id="power" aria-label="Ligar ou desligar"><svg><use href="#i-power"/></svg></button>
 </header>
+<nav class="tvs" id="tvs" hidden aria-label="TVs da casa">
+  <div class="chips" id="tvs-lista"></div>
+  <div class="tvs-acoes">
+    <button class="pilula" id="tv-identificar"><svg><use href="#i-som"/></svg>Qual é esta TV?</button>
+    <button class="pilula" id="tv-renomear">Renomear</button>
+  </div>
+</nav>
+
 
 <main>
   <section class="col remoto">
+    <div class="card liberar" id="liberar" hidden>
+      <h2>Esta TV ainda não aceita comandos pela rede</h2>
+      <p>Uma vez só, com o controle da TV, num momento em que ninguém esteja assistindo:</p>
+      <p class="caminho" id="liberar-caminho"></p>
+      <p class="nota">Enquanto isso, nada daqui aparece na tela dela.</p>
+    </div>
     <div class="card aviso-off">
       <p id="msg-off">A TV está desligada.</p>
       <button class="btn-ligar" id="ligar"><svg><use href="#i-power"/></svg>Ligar a TV</button>
@@ -355,6 +381,58 @@ const IDIOMA = (() => {
   return "en";
 })();
 const TXT = {
+"Qual é esta TV?": [
+"Which TV is this?",
+"¿Cuál es esta TV?"
+],
+"Renomear": [
+"Rename",
+"Renombrar"
+],
+"TVs da casa": [
+"TVs at home",
+"TVs de la casa"
+],
+"Ligada": [
+"On",
+"Encendida"
+],
+"Ouça: o som desta TV some por 2 segundos": [
+"Listen: this TV goes silent for 2 seconds",
+"Escucha: esta TV se queda sin sonido 2 segundos"
+],
+"Nome desta TV (ex.: Sala, Quarto)": [
+"Name for this TV (e.g. Living room, Bedroom)",
+"Nombre de esta TV (ej.: Sala, Dormitorio)"
+],
+"Esta TV ainda não aceita comandos pela rede": [
+"This TV doesn't accept network commands yet",
+"Esta TV aún no acepta comandos por la red"
+],
+"Uma vez só, com o controle da TV, num momento em que ninguém esteja assistindo:": [
+"Just once, with the TV remote, when nobody is watching:",
+"Una sola vez, con el control de la TV, cuando nadie esté mirando:"
+],
+"Configurações › Sistema › Configurações avançadas do sistema › Controle por aplicativos móveis › Acesso à rede › Ativado": [
+"Settings › System › Advanced system settings › Control by mobile apps › Network access › Enabled",
+"Configuración › Sistema › Configuración avanzada del sistema › Control por aplicaciones móviles › Acceso a la red › Habilitado"
+],
+"Enquanto isso, nada daqui aparece na tela dela.": [
+"Until then, nothing from here shows up on its screen.",
+"Mientras tanto, nada de aquí aparece en su pantalla."
+],
+"Esta TV não aceita volume exato: use + e −.": [
+"This TV doesn't take an exact volume: use + and −.",
+"Esta TV no acepta volumen exacto: usa + y −."
+],
+"Essa TV não está nesta casa.": [
+"That TV isn't in this home.",
+"Esa TV no está en esta casa."
+],
+"É a única TV desta casa.": [
+"It's the only TV in this home.",
+"Es la única TV de esta casa."
+],
 "Conectando…": [
 "Connecting…",
 "Conectando…"
@@ -609,7 +687,7 @@ async function enviar(acao, valor) {
       body: JSON.stringify({ acao, valor }),
     });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok || !j.ok) toast(tr(j.erro || "Não funcionou, tenta de novo"));
+    if (!r.ok || !j.ok) toast(tr(j.limitada ? "Esta TV ainda não aceita comandos pela rede" : (j.erro || "Não funcionou, tenta de novo")));
   } catch {
     toast(tr("Sem conexão com o Mac"));
   } finally {
@@ -682,10 +760,65 @@ function renderEntradas() {
   }
 }
 
+// ---- várias TVs na casa: escolher qual controlar, achar qual é qual e dar nome ----
+let chaveTvs = "";
+function renderTvs() {
+  const lista = (estado && estado.tvs) || [];
+  $("#tvs").hidden = lista.length < 2;
+  const chave = JSON.stringify(lista);
+  if (chave === chaveTvs) return;
+  chaveTvs = chave;
+  const box = $("#tvs-lista");
+  box.replaceChildren();
+  for (const t of lista) {
+    const b = document.createElement("button");
+    b.className = "chip" + (t.escolhida ? " atual" : "");
+    const m = document.createElement("span");
+    m.className = "mini" + (t.ligada ? "" : " off");
+    b.append(m, t.nome);
+    b.title = tr(t.ligada ? "Ligada" : "Desligada");
+    b.addEventListener("click", () => { if (!t.escolhida) escolherTv(t); });
+    box.appendChild(b);
+  }
+}
+
+async function postarTv(corpo) {
+  try {
+    const r = await fetch("/api/tv", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok) { toast(tr(j.erro || "Não funcionou, tenta de novo")); return false; }
+    return true;
+  } catch {
+    toast(tr("Sem conexão com o Mac"));
+    return false;
+  }
+}
+
+async function escolherTv(t) {
+  toast(t.nome);
+  if (await postarTv({ id: t.id })) carregar();
+}
+
+$("#tv-identificar").addEventListener("click", () => {
+  toast(tr("Ouça: o som desta TV some por 2 segundos"));
+  enviar("identificar");
+});
+$("#tv-renomear").addEventListener("click", async () => {
+  const atual = ((estado && estado.tvs) || []).find((t) => t.escolhida);
+  if (!atual) return;
+  const nome = prompt(tr("Nome desta TV (ex.: Sala, Quarto)"), atual.nome);
+  if (nome !== null && await postarTv({ id: atual.id, nome })) carregar();
+});
+
 function render() {
+  renderTvs();
   const online = estado && estado.online;
   document.body.classList.toggle("offline", !online);
-  if (estado && estado.marca) $("#titulo").textContent = estado.marca === "samsung" ? "TV Samsung" : "TV LG";
+  const travada = !!(estado && estado.limitada);
+  document.body.classList.toggle("limitada", travada);
+  $("#liberar").hidden = !travada;
+  if (travada) $("#liberar-caminho").textContent = tr(estado.liberar || "");
+  if (estado && estado.marca) $("#titulo").textContent = estado.tv_titulo || ({ samsung: "TV Samsung", roku: "TV Roku" })[estado.marca] || "TV LG";
   const dot = $("#dot"), sub = $("#sub"), power = $("#power");
   power.classList.remove("on", "off");
   if (!online) {
@@ -705,6 +838,8 @@ function render() {
   power.classList.add("on");
   power.setAttribute("aria-label", "Desligar");
 
+  $("#vol").hidden = estado.volume_exato === false;  // a Roku só sobe e desce, não diz o nível
+  $("#vol-num").hidden = estado.volume_exato === false;
   if (!arrastando) $("#vol").value = estado.volume ?? 0;
   $("#vol-num").textContent = estado.volume ?? "–";
   const mudo = $("#mudo");

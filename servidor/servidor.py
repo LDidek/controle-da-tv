@@ -1,9 +1,9 @@
-"""Controle remoto web da TV (LG webOS ou Samsung Tizen). Roda no Mac; abre no Mac ou no celular pelo Wi-Fi de casa.
+"""Controle remoto web da TV (LG webOS, Samsung Tizen ou Roku TV). Roda no Mac; abre no Mac ou no celular pelo Wi-Fi de casa.
 
 python servidor.py   →  http://<ip-do-mac>:8765
 As chaves de pareamento ficam só aqui no servidor; o navegador nunca as recebe.
 
-Os dados (config.json com as TVs, uma por casa, reconhecida pelo roteador) ficam na pasta de
+Os dados (config.json com as TVs de cada casa, reconhecida pelo roteador) ficam na pasta de
 CONTROLE_TV_DADOS. Sem a variável, usa a mesma pasta do app (~/Library/Application Support/Controle da TV).
 CONTROLE_TV_ROTEADOR diz em que casa o Mac está; o app também avisa pelo /api/casa quando a rede muda.
 """
@@ -25,6 +25,7 @@ from aiohttp import web
 from aiowebostv import WebOsClient
 from aiowebostv import webos_client as _wc
 
+import roku
 import samsung
 
 PORTA = int(os.environ.get("CONTROLE_TV_PORTA", "8765"))
@@ -74,7 +75,7 @@ def gravar_privado(caminho, texto):
 
 
 def tvs_salvas():
-    """Uma TV por casa: [{marca, roteador, tv_ip, tv_macs, tv_modelo, chave, …}]."""
+    """Todas as TVs, de todas as casas: [{marca, id, roteador, tv_ip, tv_macs, tv_modelo, chave, …}]."""
     cfg = ler_config()
     if isinstance(cfg.get("tvs"), list):
         return [t for t in cfg["tvs"] if isinstance(t, dict)]
@@ -84,8 +85,12 @@ def tvs_salvas():
 
 
 def gravar_tvs(tvs):
+    gravar_config(tvs=tvs)
+
+
+def gravar_config(**campos):
     cfg = {k: v for k, v in ler_config().items() if k not in LEGADO}
-    cfg["tvs"] = tvs
+    cfg.update(campos)
     gravar_privado(CONFIG, json.dumps(cfg, ensure_ascii=False, indent=2) + "\n")
 
 
@@ -93,37 +98,85 @@ def da_casa(t, roteador):
     return str(t.get("roteador") or "").lower() == str(roteador or "").lower()
 
 
-def tv_salva(roteador=None):
-    """A TV da casa onde o Mac está. Sem saber a casa (servidor aberto à mão), a primeira."""
-    tvs = tvs_salvas()
+def ident(t):
+    """Quem é a TV: o id que ela informa ou, na LG pareada antes disso, o endereço físico (ou o IP)."""
+    macs = macs_da(t)
+    return str((t or {}).get("id") or (macs[0] if macs else None) or (t or {}).get("tv_ip") or "")
+
+
+def mesma_tv(a, b):
+    if a.get("marca", "lg") != b.get("marca", "lg"):
+        return False
+    if ident(a) == ident(b) or set(macs_da(a)) & set(macs_da(b)):
+        return True
+    return not a.get("id") and bool(a.get("tv_ip")) and a.get("tv_ip") == b.get("tv_ip")
+
+
+def tvs_da_casa(roteador=None):
+    """As TVs da casa onde o Mac está (várias: sala, quarto…). Sem saber a casa (servidor aberto à mão), todas."""
     r = roteador or roteador_atual
-    if r:
-        return next((t for t in tvs if da_casa(t, r)), None)
-    return tvs[0] if tvs else None
+    tvs = tvs_salvas()
+    return [t for t in tvs if da_casa(t, r)] if r else tvs
 
 
-def atualizar_tv(roteador, novos):
-    """Grava campos na TV da casa (a TV pegou outro IP, token novo…)."""
+def chave_da_casa(roteador=None):
+    r = roteador or roteador_atual
+    return str(r or "").lower()
+
+
+def tv_salva(roteador=None):
+    """A TV escolhida na casa onde o Mac está; com uma só, ela. A escolha fica em "escolhidas" no config.json."""
+    lista = tvs_da_casa(roteador)
+    quero = (ler_config().get("escolhidas") or {}).get(chave_da_casa(roteador))
+    return next((t for t in lista if ident(t) == quero), lista[0] if lista else None)
+
+
+def tv_por_ident(roteador, quem):
+    return next((t for t in tvs_da_casa(roteador) if ident(t) == quem), None)
+
+
+def escolher_tv(roteador, quem):
+    escolhidas = dict(ler_config().get("escolhidas") or {})
+    escolhidas[chave_da_casa(roteador)] = quem
+    gravar_config(escolhidas=escolhidas)
+
+
+def nome_da_tv(t):
+    """Como a TV aparece no seletor: o nome dado aqui, o cômodo que a TV informa ou o nome dela."""
+    padrao = {"samsung": "TV Samsung", "roku": "TV Roku"}.get(t.get("marca"), "TV LG")
+    return t.get("apelido") or t.get("local") or t.get("nome") or padrao
+
+
+def pareada(t):
+    return bool(t) and (t.get("marca") == "roku" or chave_da(t) is not None)  # a Roku não pede pareamento
+
+
+def atualizar_tv(roteador, novos, quem=None):
+    """Grava campos numa TV da casa (a TV pegou outro IP, token novo…). Sem `quem`, na primeira da casa."""
     tvs = tvs_salvas()
     for t in tvs:
-        if da_casa(t, roteador):
+        if da_casa(t, roteador) and (quem is None or ident(t) == quem):
+            if not t.get("id"):
+                t["id"] = ident(t)  # fixa quem ela é: o IP pode mudar logo abaixo
             t.update({k: v for k, v in novos.items() if v is not None})
             gravar_tvs(tvs)
             return
 
 
 def guardar_tv_pareada(roteador, nova):
-    """Depois do pareamento: a mesma TV mantém o que já tinha (nome da entrada, apps); outra TV substitui."""
+    """Depois do pareamento: a mesma TV mantém o que já tinha (nome da entrada, apps, apelido); outra TV
+    entra na lista da casa ao lado das que já existem. A recém-pareada vira a escolhida."""
     tvs = tvs_salvas()
     nova = {k: v for k, v in nova.items() if v is not None}
+    nova["id"] = ident(nova)
     for i, t in enumerate(tvs):
-        if da_casa(t, roteador):
-            mesma = t.get("marca", "lg") == nova.get("marca") and (not t.get("id") or t.get("id") == nova.get("id"))
-            tvs[i] = {**t, **nova} if mesma else nova
+        if da_casa(t, roteador) and mesma_tv(t, nova):
+            tvs[i] = {**t, **nova}
             break
     else:
         tvs.append(nova)
     gravar_tvs(tvs)
+    escolher_tv(roteador, nova["id"])
 
 
 def chave_da(t):
@@ -398,6 +451,18 @@ class TVLG:
                 if tentativa == 2:
                     raise
 
+    async def identificar(self):
+        """Muda o som por um instante e volta ao que era: quem está na frente da TV certa ouve a pausa."""
+        cliente = await self.obter()
+        if cliente is None:
+            raise samsung.TVDesligada()
+        antes = bool(cliente.tv_state.muted)
+        await cliente.set_mute(not antes)
+        try:
+            await asyncio.sleep(2.5)
+        finally:
+            await cliente.set_mute(antes)
+
     async def icone(self, app_id):
         cliente = await self.obter()
         dados = (cliente.tv_state.apps or {}).get(app_id) if cliente else None
@@ -409,7 +474,7 @@ class TVLG:
 
 
 class Gerente:
-    """Qual TV atender: a da casa onde o Mac está agora."""
+    """Qual TV atender: a escolhida na casa onde o Mac está agora."""
 
     def __init__(self):
         self.atual = None
@@ -419,14 +484,13 @@ class Gerente:
         t = tv_salva()
         if t is None:
             return None
-        roteador = t.get("roteador")
-        chave = (t.get("marca", "lg"), str(roteador), t.get("id"))
+        roteador, quem = t.get("roteador"), ident(t)
+        chave = (t.get("marca", "lg"), str(roteador), quem)
         if self.atual is None or chave != self.chave:
             if self.atual is not None:
                 asyncio.create_task(self.atual.descartar())
-            salva = (lambda: tv_salva(roteador)) if roteador else tv_salva
-            classe = samsung.TVSamsung if chave[0] == "samsung" else TVLG
-            self.atual = classe(salva, lambda novos: atualizar_tv(roteador, novos))
+            classe = {"samsung": samsung.TVSamsung, "roku": roku.TVRoku}.get(chave[0], TVLG)
+            self.atual = classe(lambda: tv_por_ident(roteador, quem), lambda novos: atualizar_tv(roteador, novos, quem))
             self.chave = chave
         return self.atual
 
@@ -445,38 +509,50 @@ icones = {}
 
 class Pareamento:
     def __init__(self):
-        self.estado = "parado"  # parado, procurando, conferindo, esperando, pareado, erro
+        self.estado = "parado"  # parado, procurando, conferindo, esperando, esperando_ip, liberar, pareado, erro
         self.erro = None
         self.tarefa = None
         self.marca = None
 
     def json(self):
-        return {"estado": self.estado, "erro": self.erro, "marca": self.marca,
-                "pareado": chave_da(tv_salva()) is not None}
+        return {"estado": self.estado, "erro": self.erro, "marca": self.marca, "pareado": pareada(tv_salva()),
+                "liberar": roku.LIBERAR if self.estado == "liberar" else None}
 
 
 par = Pareamento()
 
 
-async def achar_qualquer_tv():
-    """A TV ligada nesta rede, de qualquer marca: (marca, ip, info) ou None. A já conhecida vem primeiro."""
-    t = tv_salva()
+async def achar_qualquer_tv(nova=False):
+    """A TV ligada nesta rede, de qualquer marca: (marca, ip, info) ou None. A já escolhida vem primeiro.
+    Com nova=True (mais uma TV na mesma casa), só vale uma que ainda não está salva aqui."""
+    t = None if nova else tv_salva()
+    salvas = tvs_da_casa() if nova else []
+    ids = {ident(x) for x in salvas}
     async with aiohttp.ClientSession() as sessao:
         if t is not None and t.get("marca") == "samsung":
             ip, info = await samsung.procurar(sessao, [t.get("tv_ip")])
             if samsung.energia(info) == "on":
                 return "samsung", ip, info
-        lg, (ip_s, info_s) = await asyncio.gather(
+        if t is not None and t.get("marca") == "roku" and t.get("tv_ip"):
+            info = await roku.ler_info(sessao, t["tv_ip"])
+            if info and roku.id_da(info) == ident(t):
+                return "roku", t["tv_ip"], info
+        lg, (ip_s, info_s), rokus = await asyncio.gather(
             achar_tv(t if (t or {}).get("marca", "lg") == "lg" else None, procurar=True),
-            samsung.procurar(sessao, []))
-        if lg:
+            samsung.procurar(sessao, []),
+            roku.procurar(sessao, [], ignorar=ids))
+        if lg and not any(x.get("marca", "lg") == "lg" and x.get("tv_ip") == lg for x in salvas):
             return "lg", lg, None
-        if samsung.energia(info_s) == "on":
+        if samsung.energia(info_s) == "on" and samsung.dados_da_tv(ip_s, info_s)["id"] not in ids:
             return "samsung", ip_s, info_s
+        # A Roku responde mesmo com a tela apagada ("Início rápido"): a ligada vem antes.
+        rokus.sort(key=lambda r: roku.energia(r[1]) != "on")
+        if rokus:
+            return ("roku",) + rokus[0]
     return None
 
 
-async def parear(roteador):
+async def parear(roteador, nova=False):
     global roteador_atual
     par.erro = None
     par.marca = None
@@ -488,17 +564,20 @@ async def parear(roteador):
     try:
         achada = None
         for _ in range(4):  # logo depois de abrir, a primeira tentativa na rede às vezes falha
-            achada = await achar_qualquer_tv()
+            achada = await achar_qualquer_tv(nova)
             if achada:
                 break
             await asyncio.sleep(1.5)
         if achada is None:
-            par.estado, par.erro = "erro", "Não encontrei a TV ligada na rede. Ligue a TV e tente de novo."
+            par.estado, par.erro = "erro", ("Não encontrei outra TV ligada na rede. Ligue a TV nova e tente de novo."
+                                            if nova else "Não encontrei a TV ligada na rede. Ligue a TV e tente de novo.")
             return
         marca, ip, info = achada
         par.marca = marca
         if marca == "samsung":
             await parear_samsung(ip, info, roteador)
+        elif marca == "roku":
+            await parear_roku(ip, info, roteador)
         else:
             await parear_lg(ip, roteador)
         await gerente.descartar()
@@ -522,8 +601,9 @@ async def parear(roteador):
 
 
 async def parear_lg(ip, roteador):
-    salva = tv_salva(roteador) if roteador else None
-    chave = chave_da(salva) if (salva or {}).get("marca", "lg") == "lg" else None
+    lgs = [t for t in tvs_da_casa(roteador) if t.get("marca", "lg") == "lg"] if roteador else []
+    salva = next((t for t in lgs if t.get("tv_ip") == ip), lgs[0] if len(lgs) == 1 else None)
+    chave = chave_da(salva)
     par.estado = "conferindo" if chave else "esperando"
     cliente = None
     espera_original = _wc.RECEIVE_TIMEOUT
@@ -570,9 +650,9 @@ async def parear_lg(ip, roteador):
 
 async def parear_samsung(ip, info, roteador):
     dados = samsung.dados_da_tv(ip, info)
-    salva = tv_salva(roteador) if roteador else None
-    mesma = (salva or {}).get("marca") == "samsung" and (salva or {}).get("id") == dados["id"]
-    token = chave_da(salva) if mesma else None
+    salva = next((t for t in tvs_da_casa(roteador) if t.get("marca") == "samsung" and t.get("id") == dados["id"]),
+                 None) if roteador else None
+    token = chave_da(salva)
     par.estado = "conferindo" if token else "esperando"
 
     def esperando():
@@ -595,9 +675,29 @@ async def parear_samsung(ip, info, roteador):
             try:
                 token_ip = await samsung.parear_ip(sessao, ip)
                 if token_ip:
-                    atualizar_tv(roteador, {"chave_ip": token_ip})
+                    atualizar_tv(roteador, {"chave_ip": token_ip}, dados["id"])
             except Exception as e:
                 logging.getLogger("pareamento").warning("Controle Remoto IP não pareou: %s", samsung.sem_segredo(repr(e)))
+
+
+async def parear_roku(ip, info, roteador):
+    """A Roku não pede "Permitir": entra na lista na hora. Se o controle pela rede estiver "Limitado", espera
+    (até 10 min, só lendo) alguém liberar no controle físico; o assistente mostra o caminho enquanto isso."""
+    guardar_tv_pareada(roteador, {
+        **roku.dados_da_tv(ip, info),
+        "roteador": roteador,
+        "pareado_em": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+    })
+    if not roku.limitada(info):
+        return
+    par.estado = "liberar"
+    async with aiohttp.ClientSession() as sessao:
+        fim = time.time() + 600
+        while time.time() < fim:
+            await asyncio.sleep(3)
+            atual = await roku.ler_info(sessao, ip)
+            if atual and not roku.limitada(atual):
+                return
 
 
 async def parear_iniciar(req):
@@ -606,7 +706,7 @@ async def parear_iniciar(req):
     except Exception:
         dados = {}
     if par.tarefa is None or par.tarefa.done():
-        par.tarefa = asyncio.create_task(parear(dados.get("roteador")))
+        par.tarefa = asyncio.create_task(parear(dados.get("roteador"), bool(dados.get("nova"))))
         await asyncio.sleep(0)
     return web.json_response(par.json())
 
@@ -615,10 +715,10 @@ async def parear_estado(_req):
     return web.json_response(par.json())
 
 
-async def procurar(_req):
-    achada = await achar_qualquer_tv()
+async def procurar(req):
+    achada = await achar_qualquer_tv(req.query.get("nova") == "1")
     return web.json_response({"encontrada": achada is not None, "ip": achada and achada[1],
-                              "marca": achada and achada[0], "pareado": chave_da(tv_salva()) is not None})
+                              "marca": achada and achada[0], "pareado": pareada(tv_salva())})
 
 
 async def casa(req):
@@ -636,7 +736,7 @@ async def casa(req):
 
 
 async def saude(_req):
-    return web.json_response({"ok": True, "pareado": chave_da(tv_salva()) is not None})
+    return web.json_response({"ok": True, "pareado": pareada(tv_salva())})
 
 
 # MARK: estado e ações
@@ -681,6 +781,51 @@ def resumo(cliente):
     }
 
 
+vistas = {}  # outras TVs da casa: {ident: {"ligada": bool | None, "em": quando foi conferida}}
+
+
+async def ver_tv(t):
+    """Se a TV está ligada, só lendo (nada aparece na tela)."""
+    ip, marca = t.get("tv_ip"), t.get("marca", "lg")
+    if not ip:
+        return None
+    if marca == "lg":
+        return await porta_aberta(ip, 0.8)
+    async with aiohttp.ClientSession() as sessao:
+        if marca == "samsung":
+            return samsung.energia(await samsung.ler_info(sessao, ip, 1.5)) == "on"
+        return roku.energia(await roku.ler_info(sessao, ip, 1.5)) == "on"
+
+
+def lista_de_tvs(escolhida, online):
+    """Para o seletor (só com duas TVs ou mais na casa). As outras são conferidas em segundo plano,
+    no máximo a cada 15 s cada uma: a escolhida já foi lida agora."""
+    lista = tvs_da_casa()
+    if len(lista) < 2:
+        return None
+    agora, minha = time.time(), ident(escolhida)
+    saida = []
+    for t in lista:
+        quem = ident(t)
+        if quem == minha:
+            ligada = online
+        else:
+            v = vistas.get(quem)
+            if v is None or agora - v["em"] > 15:
+                vistas[quem] = {"ligada": (v or {}).get("ligada"), "em": agora}
+
+                async def conferir(quem=quem, t=t):
+                    try:
+                        vistas[quem]["ligada"] = await ver_tv(t)
+                    except Exception:
+                        vistas[quem]["ligada"] = None
+                asyncio.create_task(conferir())
+            ligada = vistas[quem]["ligada"]
+        saida.append({"id": quem, "nome": nome_da_tv(t), "marca": t.get("marca", "lg"),
+                      "ligada": ligada, "escolhida": quem == minha})
+    return saida
+
+
 async def estado(_req):
     tv = gerente.tv()
     if tv is None:
@@ -688,6 +833,10 @@ async def estado(_req):
     resposta = await tv.estado()
     if resposta.get("online"):
         resposta = marcar_console(resposta, console_da_rede())
+    tvs = lista_de_tvs(tv_salva(), bool(resposta.get("online")))
+    if tvs:
+        resposta["tvs"] = tvs
+        resposta["tv_titulo"] = nome_da_tv(tv_salva())
     return web.json_response(resposta)
 
 
@@ -739,11 +888,15 @@ async def acao(req):
     try:
         if nome == "ligar":
             await tv.ligar()
+        elif nome == "identificar":
+            await tv.identificar()
         else:
             await tv.agir(nome, valor)
         return web.json_response({"ok": True})
     except samsung.TVDesligada:
         return web.json_response({"ok": False, "erro": "A TV está desligada."}, status=409)
+    except roku.Limitada:
+        return web.json_response({"ok": False, "limitada": True, "erro": ERRO_LIMITADA}, status=409)
     except web.HTTPException:
         raise
     except (ValueError, TypeError) as e:
@@ -752,6 +905,37 @@ async def acao(req):
         # O detalhe (que pode trazer endereço e token) fica só no log, limpo; quem pediu recebe uma frase.
         logging.getLogger("acao").warning("%s falhou: %s", nome, samsung.sem_segredo(repr(e)))
         return web.json_response({"ok": False, "erro": "Não funcionou, tenta de novo"}, status=502)
+
+
+ERRO_LIMITADA = ("Esta TV ainda não aceita comandos pela rede. Na TV, com o controle: " + roku.LIBERAR + ".")
+
+
+async def tv_escolher(req):
+    """{"id"}: passa a controlar essa TV. Com "nome": renomeia (vazio volta ao nome da TV). Com "esquecer": tira da lista."""
+    dados = await req.json()
+    quem = str(dados.get("id") or "")
+    t = tv_por_ident(None, quem)
+    if t is None:
+        return web.json_response({"ok": False, "erro": "Essa TV não está nesta casa."}, status=404)
+    if dados.get("esquecer"):
+        restantes = [x for x in tvs_salvas() if not (da_casa(x, t.get("roteador")) and ident(x) == quem)]
+        if not any(da_casa(x, t.get("roteador")) for x in restantes):
+            return web.json_response({"ok": False, "erro": "É a única TV desta casa."}, status=409)
+        gravar_tvs(restantes)
+    elif "nome" in dados:
+        nome = str(dados.get("nome") or "").strip()[:30]
+        tvs = tvs_salvas()
+        for x in tvs:
+            if da_casa(x, t.get("roteador")) and ident(x) == quem:
+                x["id"] = quem
+                if nome:
+                    x["apelido"] = nome
+                else:
+                    x.pop("apelido", None)
+        gravar_tvs(tvs)
+    else:
+        escolher_tv(None, quem)
+    return web.json_response({"ok": True})
 
 
 def buscar_youtube(termo):
@@ -859,6 +1043,7 @@ def criar_app():
         web.get("/", pagina),
         web.get("/api/estado", estado),
         web.post("/api/acao", acao),
+        web.post("/api/tv", tv_escolher),
         web.get("/icone/{app_id}", icone),
         web.get("/api/youtube", youtube_busca),
         web.get("/api/saude", saude),

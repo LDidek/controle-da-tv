@@ -51,6 +51,7 @@ CATALOGO = [
     (["3201611010983"], "YouTube Kids", None, False),
     (["3201604009182"], "Telecine", None, False),
     (["3202302030097"], "Crunchyroll", "3202302030097/icon_198x198_20240729082452564.png", False),
+    (["3202306031311"], "Stremio", None, False),
     (["3201808016802"], "Pluto TV", "3201808016802/icon_198x198_20240830071201812.png", False),
     (["3201806016390"], "DAZN", "3201806016390/icon_198x198_20240529034626589.png", False),
     (["3201803015944", "3202006021105"], "Discovery+", "3202006021105/icon_198x198_20210706050608049.png", False),
@@ -548,8 +549,9 @@ class TVSamsung:
             await self._ler_volume()
         await self._ler_app()
         s = self.salva()
-        if time.time() - float(s.get("apps_em") or 0) > 12 * 3600:
-            self._atualizar({"apps_em": int(time.time())})
+        # A cada 12 h, e logo depois de o catálogo ganhar um app novo (numa atualização do Controle da TV).
+        if time.time() - float(s.get("apps_em") or 0) > 12 * 3600 or s.get("apps_catalogo") != len(POR_ID):
+            self._atualizar({"apps_em": int(time.time()), "apps_catalogo": len(POR_ID)})
             self.em_segundo_plano(self.conferir_apps())
         return self._montar()
 
@@ -667,7 +669,7 @@ class TVSamsung:
                     achados.append(app_id)
                     break
         log.info("apps desta TV: %d do catálogo", len(achados))
-        self._atualizar({"apps": achados, "apps_em": int(time.time())})
+        self._atualizar({"apps": achados, "apps_em": int(time.time()), "apps_catalogo": len(POR_ID)})
 
     def _ja_mudou(self, **campos):
         """O painel vê a mudança na hora; a leitura seguinte confirma com a TV."""
@@ -780,6 +782,19 @@ class TVSamsung:
             pass  # o teclado da Samsung não recebe "apagar" pela rede
         else:
             raise ValueError("ação desconhecida")
+
+    async def identificar(self):
+        """Muda o som por um instante e volta ao que era: quem está na frente da TV certa ouve a pausa."""
+        _ip, info = await self.info()
+        if energia(info) != "on":
+            raise TVDesligada()
+        if self.mudo is None and not await self._ler_estado_ip():
+            await self._ler_volume()
+        await self.agir("mudo", None)
+        try:
+            await asyncio.sleep(2.5)
+        finally:
+            await self.agir("mudo", None)
 
     async def _tela_do_youtube(self, dial):
         codigo, texto = await self._http("GET", dial, 3)

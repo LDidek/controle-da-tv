@@ -26,6 +26,14 @@ struct ConsoleTV: Decodable, Equatable {
     var ligado: Bool?
     var simbolo: String { tipo == "XBOX" ? "xbox.logo" : "playstation.logo" }
 }
+/// Uma das TVs da casa, para o seletor (o servidor só manda a lista quando há duas ou mais).
+struct TVNaCasa: Decodable, Equatable, Identifiable {
+    let id: String
+    let nome: String
+    var marca: String?
+    var ligada: Bool?
+    var escolhida: Bool?
+}
 struct EstadoTV: Decodable, Equatable {
     let online: Bool
     var pareado: Bool?
@@ -37,12 +45,18 @@ struct EstadoTV: Decodable, Equatable {
     var entradas: [EntradaTV]?
     var apps: [AppTV]?
     var ligando: Bool?
-    var marca: String?    // "lg" ou "samsung" (servidor antigo não manda: LG)
+    var marca: String?    // "lg", "samsung" ou "roku" (servidor antigo não manda: LG)
     var nome: String?
     var ao_vivo: Bool?    // a TV aceita "TV ao vivo" pela rede (na Samsung, só com o Controle Remoto IP)
     var console: ConsoleTV?
+    var tvs: [TVNaCasa]?  // duas ou mais TVs nesta casa: o painel mostra o seletor
+    var tv_titulo: String?
+    var limitada: Bool?   // Roku com "Controle por aplicativos móveis" em Limitado: lê, mas não aceita comando
+    var liberar: String?  // onde liberar, no menu da TV
+    var volume_exato: Bool?  // a Roku só sobe e desce: sem barra de volume
 
     var ehSamsung: Bool { marca == "samsung" }
+    var titulo: String { tv_titulo ?? (marca == "samsung" ? "TV Samsung" : marca == "roku" ? "TV Roku" : "TV LG") }
 }
 
 @MainActor
@@ -332,6 +346,41 @@ final class Controle: ObservableObject {
             _ = try? await URLSession.shared.data(for: req)
             try? await Task.sleep(for: .milliseconds(600))
             await atualizar()
+        }
+    }
+
+    // MARK: várias TVs na casa
+
+    /// Passa a controlar outra TV da casa ("id"), renomeia ("nome", vazio volta ao nome dela) ou esquece ("esquecer").
+    func tv(_ corpo: [String: Any]) {
+        ultimaInteracao = Date()
+        Task {
+            var req = URLRequest(url: URL(string: "http://127.0.0.1:\(porta)/api/tv")!)
+            req.httpMethod = "POST"
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.httpBody = try? JSONSerialization.data(withJSONObject: corpo)
+            req.timeoutInterval = 8
+            if let (dados, _) = try? await URLSession.shared.data(for: req),
+               let r = (try? JSONSerialization.jsonObject(with: dados)) as? [String: Any], r["ok"] as? Bool != true {
+                registrar("tv \(corpo["id"] ?? ""): \(r["erro"] ?? "falhou")")
+            }
+            await atualizar()
+        }
+    }
+
+    func renomearTV(_ tv: TVNaCasa) {
+        let alerta = NSAlert()
+        alerta.messageText = T("Nome desta TV")
+        alerta.informativeText = T("Por exemplo: Sala, Quarto, Cozinha.")
+        let campo = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
+        campo.stringValue = tv.nome
+        alerta.accessoryView = campo
+        alerta.addButton(withTitle: T("Salvar"))
+        alerta.addButton(withTitle: T("Cancelar"))
+        alerta.window.initialFirstResponder = campo
+        NSApp.activate(ignoringOtherApps: true)
+        if alerta.runModal() == .alertFirstButtonReturn {
+            self.tv(["id": tv.id, "nome": campo.stringValue])
         }
     }
 

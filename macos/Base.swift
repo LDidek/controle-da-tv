@@ -50,7 +50,7 @@ enum Versao {
     static var build: Int { Int(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "") ?? 0 }
 }
 
-/// Uma TV, de uma casa (reconhecida pelo roteador).
+/// Uma TV de uma casa (reconhecida pelo roteador). Uma casa pode ter várias: a escolhida fica em "escolhidas".
 struct TVSalva: Codable, Equatable {
     var marca: String?
     var id: String?
@@ -63,8 +63,10 @@ struct TVSalva: Codable, Equatable {
     var chave: String?
 
     var ehSamsung: Bool { marca == "samsung" }
-    /// A LG pareada antes das várias casas guarda a chave no arquivo client-key.
+    var ehRoku: Bool { marca == "roku" }
+    /// A LG pareada antes das várias casas guarda a chave no arquivo client-key. A Roku não pede pareamento.
     var pareada: Bool {
+        if ehRoku { return true }
         if let chave, !chave.isEmpty { return true }
         return !ehSamsung && temChave()
     }
@@ -278,9 +280,16 @@ private func tentarConexao(_ ip: String, _ numero: UInt16, espera: Double) async
 }
 
 /// Esta TV responde no IP salvo? (usado para reconhecer a casa se o roteador for trocado)
-/// A Samsung diz quem é (o id tem que bater); da LG basta a porta 3000 aberta.
+/// A Samsung e a Roku dizem quem são (o id tem que bater); da LG basta a porta 3000 aberta.
 func tvResponde(_ tv: TVSalva) async -> Bool {
     guard let ip = tv.tv_ip else { return false }
+    if tv.ehRoku {
+        var req = URLRequest(url: URL(string: "http://\(ip):8060/query/device-info")!)
+        req.timeoutInterval = 2
+        guard let (dados, _) = try? await URLSession.shared.data(for: req) else { return false }
+        let texto = String(decoding: dados, as: UTF8.self)
+        return texto.contains("<device-info>") && (tv.id == nil || texto.contains(">\(tv.id!)<"))
+    }
     guard tv.ehSamsung else { return await tvRespondeEm(ip) }
     var req = URLRequest(url: URL(string: "http://\(ip):8001/api/v2/")!)
     req.timeoutInterval = 2

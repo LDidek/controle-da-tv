@@ -51,6 +51,10 @@ final class Assistente: NSObject, ObservableObject, NSWindowDelegate {
     /// Conectando mais uma TV (de outra casa): os passos da TV valem para a rede atual, não para "alguma TV".
     @Published private(set) var novaTV = false
     @Published var tvDaRede = Controle.tvDaRedePareada()
+    /// Mais uma TV na mesma casa (quarto, sala…): só conta como feito quando entra uma TV que ainda não estava.
+    @Published private(set) var mesmaCasa = false
+    private var tvsAntes: Set<String> = []
+    @Published var tvNovaNaCasa = false
     @Published var marcaAchada: String?
     private var opcoesNovaTV = false
 
@@ -73,8 +77,8 @@ final class Assistente: NSObject, ObservableObject, NSWindowDelegate {
         case .mover: return noLugar
         case .motor: return motorPronto
         case .redeLocal: return rede == .liberada
-        case .tv: return (novaTV ? tvDaRede : configCompleta) || tvIP != nil
-        case .parear: return novaTV ? tvDaRede : configCompleta
+        case .tv: return (mesmaCasa ? tvNovaNaCasa : novaTV ? tvDaRede : configCompleta) || tvIP != nil
+        case .parear: return mesmaCasa ? tvNovaNaCasa : novaTV ? tvDaRede : configCompleta
         case .inicio: return inicio == .enabled
         case .opcoesTV: return novaTV ? opcoesNovaTV : marcos.opcoesTV
         case .pronto: return novaTV ? false : marcos.concluido
@@ -97,13 +101,26 @@ final class Assistente: NSObject, ObservableObject, NSWindowDelegate {
 
     // MARK: janela
 
-    /// LG ou Samsung: a que o assistente achou, a da rede atual ou a que o painel mostra.
-    var ehSamsung: Bool {
-        let marca = marcaAchada ?? ConfigCasa.ler().tv(doRoteador: macDoRoteador())?.marca ?? c.estado?.marca
-        return marca == "samsung"
+    /// LG, Samsung ou Roku: a que o assistente achou, a da rede atual ou a que o painel mostra.
+    private var marca: String? {
+        marcaAchada ?? (mesmaCasa ? nil : ConfigCasa.ler().tv(doRoteador: macDoRoteador())?.marca) ?? c.estado?.marca
+    }
+    var ehSamsung: Bool { marca == "samsung" }
+    var ehRoku: Bool { marca == "roku" }
+
+    /// As TVs salvas na casa onde o Mac está, por quem são.
+    private static func tvsDaCasa() -> Set<String> {
+        let mac = macDoRoteador()?.lowercased()
+        return Set(ConfigCasa.ler().tvs.filter { $0.roteador?.lowercased() == mac }
+            .map { $0.id ?? $0.tv_macs?.first ?? $0.tv_ip ?? "" })
     }
 
-    func abrir(em alvo: Passo? = nil, novaTV nova: Bool = false) {
+    func abrir(em alvo: Passo? = nil, novaTV nova: Bool = false, mesmaCasa outraNaCasa: Bool = false) {
+        if outraNaCasa && !mesmaCasa {
+            mesmaCasa = true
+            tvsAntes = Assistente.tvsDaCasa()
+            tvNovaNaCasa = false
+        }
         if nova && !novaTV {
             novaTV = true
             opcoesNovaTV = false
@@ -148,6 +165,7 @@ final class Assistente: NSObject, ObservableObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         aberto = false
         novaTV = false
+        mesmaCasa = false
         vigia?.cancel()
         vigia = nil
         // Solta a janela inteira: escondida, ela continuaria animando o anel pulsante e gastando CPU.
@@ -184,6 +202,7 @@ final class Assistente: NSObject, ObservableObject, NSWindowDelegate {
         marcos = Marcos.ler()
         configCompleta = Controle.lerConfigCompleta()
         tvDaRede = Controle.tvDaRedePareada()
+        if mesmaCasa { tvNovaNaCasa = !Assistente.tvsDaCasa().subtracting(tvsAntes).isEmpty }
     }
 
     /// Confere o passo da tela a cada 2 s (a pessoa pode estar liberando algo nos Ajustes).
@@ -214,7 +233,7 @@ final class Assistente: NSObject, ObservableObject, NSWindowDelegate {
         case .tv:
             if !feito(.tv) { await procurarTV() }
         case .parear:
-            if ["procurando", "conferindo", "esperando", "esperando_ip"].contains(pareamento) { await lerPareamento() }
+            if ["procurando", "conferindo", "esperando", "esperando_ip", "liberar"].contains(pareamento) { await lerPareamento() }
         default:
             break
         }
@@ -366,7 +385,7 @@ final class Assistente: NSObject, ObservableObject, NSWindowDelegate {
         tvProcurando = true
         defer { tvProcurando = false }
         await c.garantirServidor()
-        var req = URLRequest(url: URL(string: "http://127.0.0.1:\(porta)/api/procurar")!)
+        var req = URLRequest(url: URL(string: "http://127.0.0.1:\(porta)/api/procurar\(mesmaCasa ? "?nova=1" : "")")!)
         req.timeoutInterval = 8
         if let (dados, _) = try? await URLSession.shared.data(for: req),
            let r = try? JSONDecoder().decode(RespostaProcura.self, from: dados) {
@@ -386,7 +405,7 @@ final class Assistente: NSObject, ObservableObject, NSWindowDelegate {
                 var req = URLRequest(url: URL(string: "http://127.0.0.1:\(porta)/api/parear")!)
                 req.httpMethod = "POST"
                 req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                req.httpBody = try? JSONSerialization.data(withJSONObject: ["roteador": roteador ?? ""])
+                req.httpBody = try? JSONSerialization.data(withJSONObject: ["roteador": roteador ?? "", "nova": mesmaCasa])
                 req.timeoutInterval = 6
                 if let (dados, _) = try? await URLSession.shared.data(for: req),
                    let r = try? JSONDecoder().decode(RespostaPareamento.self, from: dados) {
@@ -412,9 +431,10 @@ final class Assistente: NSObject, ObservableObject, NSWindowDelegate {
         pareamento = r.estado
         pareamentoErro = r.erro
         if let marca = r.marca { marcaAchada = marca }
-        if r.estado == "pareado" {
+        if r.estado == "pareado" || r.estado == "liberar" {  // a Roku já entra na lista enquanto espera a liberação
             configCompleta = Controle.lerConfigCompleta()
             tvDaRede = Controle.tvDaRedePareada()
+            if mesmaCasa { tvNovaNaCasa = !Assistente.tvsDaCasa().subtracting(tvsAntes).isEmpty }
             c.configCompleta = configCompleta
             c.checarRede()
         }
@@ -614,6 +634,17 @@ struct PaginaPasso: View {
             } else {
                 t = T("Agora ligue a TV pelo controle remoto, do jeito de sempre (o botão de ligar, lá em cima no controle).\n\nEspere aparecer a imagem na TV. Eu procuro a TV sozinho e aviso aqui embaixo quando encontrar.")
             }
+        case .parear where a.ehRoku:
+            switch a.pareamento {
+            case "liberar":
+                t = T("Achei a TV. Falta só uma coisa, e é uma vez só.\n\nCom o controle da TV, num momento em que ninguém esteja assistindo, abra **Configurações › Sistema › Configurações avançadas do sistema › Controle por aplicativos móveis › Acesso à rede** e escolha **Ativado**.\n\nEu fico esperando aqui e aviso quando der certo.")
+            case "erro":
+                t = T("Não deu certo desta vez, mas está tudo bem.\n\nVeja se a TV está ligada e clique em **Tentar de novo**.")
+            default:
+                t = a.feito(.parear)
+                    ? T("A TV e o computador já se conhecem.\n\nClique no botão azul **Continuar**.")
+                    : T("Esta TV não mostra nenhum aviso: é só clicar no botão azul **Conectar**.")
+            }
         case .parear where a.ehSamsung:
             switch a.pareamento {
             case "esperando":
@@ -647,6 +678,8 @@ struct PaginaPasso: View {
             default:
                 t = T("Para o controle estar sempre pronto, ele vai abrir sozinho toda vez que o computador ligar.\n\nClique no botão azul **Ativar**. Pode aparecer um aviso no canto da tela dizendo que um item foi adicionado: é normal.")
             }
+        case .opcoesTV where a.ehRoku:
+            t = T("Para o computador conseguir **ligar** a TV, a opção **Início rápido da TV** precisa estar ligada no menu da TV, em **Configurações › Sistema › Energia**.\n\nSe ela já estiver ligada, é só clicar em **Já está tudo certo**.")
         case .opcoesTV where a.ehSamsung:
             t = a.c.estado?.ao_vivo == true
                 ? T("Para o computador conseguir **ligar** a TV, a opção **Ligar com Dispositivo Móvel** precisa estar ligada no menu da TV, em **Configurações › Geral › Rede › Configurações Especializadas**.\n\nO **Controle Remoto IP** já está conectado: o computador escolhe a entrada (HDMI 1, 2…) direto.")
@@ -685,11 +718,12 @@ struct PaginaPasso: View {
             if a.tvIP != nil { return .ok(T("TV encontrada.")) }
             return .girando(T("Procurando a TV… (ligue a TV pelo controle remoto)"))
         case .parear:
-            if a.feito(.parear) && !["erro", "procurando", "conferindo", "esperando", "esperando_ip"].contains(a.pareamento) {
+            if a.feito(.parear) && !["erro", "procurando", "conferindo", "esperando", "esperando_ip", "liberar"].contains(a.pareamento) {
                 return .ok(T("Conectado à TV."))
             }
             switch a.pareamento {
             case "procurando", "conferindo": return .girando(T("Falando com a TV…"))
+            case "liberar": return .girando(T("Esperando você ativar o controle pela rede na TV…"))
             case "esperando" where a.ehSamsung, "esperando_ip": return .girando(T("Esperando você escolher Permitir na TV…"))
             case "esperando": return .girando(T("Esperando você apertar OK no controle da TV…"))
             case "erro": return .erro(T(a.pareamentoErro ?? "Não deu certo. Tente de novo."))
@@ -719,7 +753,7 @@ struct PaginaPasso: View {
         case .tv: return a.feito(.tv) ? (T("Continuar"), true) : (T("Procurar de novo"), a.motorPronto && !a.tvProcurando)
         case .parear:
             switch a.pareamento {
-            case "procurando", "conferindo", "esperando", "esperando_ip": return (T("Aguardando…"), false)
+            case "procurando", "conferindo", "esperando", "esperando_ip", "liberar": return (T("Aguardando…"), false)
             case "erro": return (T("Tentar de novo"), a.motorPronto)
             case _ where a.feito(.parear): return (T("Continuar"), true)
             default: return (T("Conectar"), a.motorPronto)
@@ -742,6 +776,8 @@ struct PaginaPasso: View {
             return [(T("Continuar mesmo assim"), { a.avancar() })]
         case .redeLocal where a.rede == .verificando:
             return [(T("Abrir Ajustes"), { a.abrirAjustesRede() })]
+        case .parear where a.pareamento == "liberar":  // dá para liberar depois: o painel mostra o caminho
+            return [(T("Fazer isso depois"), { a.avancar() })]
         case .opcoesTV where a.ehSamsung && a.c.estado?.ao_vivo != true && a.feito(.parear):
             return [(T("Conectar de novo"), { a.conectarDeNovo() })]
         default:
