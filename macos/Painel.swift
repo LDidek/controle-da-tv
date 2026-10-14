@@ -129,6 +129,7 @@ struct PainelTV: View {
                     conteudo(secao)
                 } else {
                     TelaTV(ligada: ligada, ligando: e?.ligando == true, appId: appAtual, titulo: tituloTela,
+                           tocando: ligada ? e?.tocando : nil, recebido: c.estadoEm,
                            simbolo: simboloTela, cores: coresDaLuz, intensidade: intensidadeOndas)
                 }
             }
@@ -771,6 +772,8 @@ struct TelaTV: View {
     let ligando: Bool
     let appId: String
     let titulo: String
+    var tocando: TocandoYT? = nil  // vídeo no YouTube da TV: a capa entra na tela e o título vai embaixo
+    var recebido = Date()
     let simbolo: String?
     let cores: [NSColor]       // luz ambiente: cores do app que está passando
     let intensidade: Double    // ondas de som: 0 = mudo ou volume 0
@@ -816,6 +819,7 @@ struct TelaTV: View {
                 }
                 Rectangle().fill(Color(white: 0.28)).frame(width: 6, height: 12)
                 Capsule().fill(Color(white: 0.28)).frame(width: 84, height: 5)
+                if let tocando { legenda(tocando) }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -823,7 +827,79 @@ struct TelaTV: View {
         .animation(.easeInOut(duration: 0.35), value: appId)
     }
 
+    /// Embaixo da TV: título, canal e o tempo andando (sem barulho: só redesenha a cada segundo).
+    private func legenda(_ t: TocandoYT) -> some View {
+        VStack(spacing: 3) {
+            Text(t.titulo ?? "YouTube")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Color(white: 0.92))
+                .lineLimit(2)
+                .multilineTextAlignment(.center)
+            TimelineView(.periodic(from: .now, by: 1)) { contexto in
+                Text([t.canal, tempo(t, contexto.date)].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
+                    .font(.system(size: 11.5))
+                    .monospacedDigit()
+                    .foregroundStyle(apagado)
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 12)
+        .id(t.video)
+        .transition(.opacity)
+    }
+
+    private func tempo(_ t: TocandoYT, _ agora: Date) -> String? {
+        guard let p = t.posicao(em: agora, recebido: recebido) else { return nil }
+        let texto = t.duracao.map { "\(relogio(p)) / \(relogio($0))" } ?? relogio(p)
+        return t.estado == "pausado" ? "\(texto) · \(T("Pausado"))" : texto
+    }
+
+    private func relogio(_ segundos: Double) -> String {
+        let s = max(0, Int(segundos))
+        return s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, s / 60 % 60, s % 60) : String(format: "%d:%02d", s / 60, s % 60)
+    }
+
+    /// A capa do vídeo ocupando a tela da TV, com a barrinha vermelha de progresso do YouTube.
+    private func capa(_ t: TocandoYT) -> some View {
+        ZStack(alignment: .bottomLeading) {
+            Color(white: 0.07)
+            AsyncImage(url: t.miniatura.flatMap(URL.init(string:))) { imagem in
+                imagem.resizable().aspectRatio(contentMode: .fill)
+            } placeholder: {
+                IconeApp(id: appId, tamanho: 44)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .frame(width: 228, height: 130)
+            .clipped()
+            if t.estado == "pausado" {
+                Image(systemName: "pause.fill")
+                    .font(.system(size: 22))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .shadow(radius: 4)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            TimelineView(.periodic(from: .now, by: 1)) { contexto in
+                let fracao = t.duracao.flatMap { d in t.posicao(em: contexto.date, recebido: recebido).map { d > 0 ? $0 / d : 0 } } ?? 0
+                ZStack(alignment: .leading) {
+                    Rectangle().fill(.white.opacity(0.25))
+                    Rectangle().fill(Color.red).frame(width: 228 * fracao)
+                }
+                .frame(width: 228, height: 3)
+            }
+        }
+        .id(t.video)
+        .transition(.opacity)
+    }
+
     private var conteudoLigada: some View {
+        if let tocando {
+            return AnyView(capa(tocando).clipShape(RoundedRectangle(cornerRadius: 9)))
+        }
+        return AnyView(conteudoApp)
+    }
+
+    private var conteudoApp: some View {
         let cor = Color(nsColor: cores.first ?? .systemBlue)
         return ZStack {
             RoundedRectangle(cornerRadius: 9).fill(Color(white: 0.07))

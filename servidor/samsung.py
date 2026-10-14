@@ -328,6 +328,191 @@ class Lounge:
         return sid, sessao_g, ultimo
 
 
+def eventos_do_lounge(texto):
+    """A resposta do lounge vem em pedaços: uma linha com o tamanho e depois um JSON [[n, [tipo, ...]], ...],
+    que pode ocupar várias linhas. Devolve [(n, tipo, args)]."""
+    saida, pedaco = [], ""
+    for linha in texto.splitlines():
+        if not pedaco and linha.strip().isdigit():
+            continue
+        pedaco += linha + "\n"
+        try:
+            lista = json.loads(pedaco)
+        except ValueError:
+            continue
+        pedaco = ""
+        for numero, (tipo, *args) in lista:
+            saida.append((numero, tipo, args))
+    return saida
+
+
+ESTADOS_YT = {"1": "tocando", "2": "pausado", "3": "carregando", "0": "terminou"}
+
+
+class OuvinteYouTube:
+    """O que o YouTube da TV está tocando, pelo mesmo canal que o celular usa para transmitir (o "lounge"):
+    entra como mais um controle conectado e só escuta. Vale para o que foi aberto direto na TV também.
+    Nunca manda comando: tocar, pausar e avançar continuam pelas teclas."""
+
+    def __init__(self, sessao, tela_do_youtube):
+        self.sessao = sessao
+        self.tela_do_youtube = tela_do_youtube  # corrotina que devolve o screenId (DIAL da TV)
+        self.agora = None      # {"video", "posicao", "duracao", "estado", "em"}
+        self.nomes = {}        # videoId -> {"titulo", "canal"}
+        self.tarefa = asyncio.create_task(self._rodar())
+
+    def parar(self):
+        self.tarefa.cancel()
+
+    def rodando(self):
+        return not self.tarefa.done()
+
+    def resumo(self):
+        """Para o painel: a posição já vem acertada para agora (quem recebe só continua contando)."""
+        a = self.agora
+        if not a or not a.get("video"):
+            return None
+        posicao = a.get("posicao")
+        if posicao is not None and a["estado"] == "tocando":
+            posicao += time.time() - a["em"]
+        if posicao is not None and a.get("duracao"):
+            posicao = min(posicao, a["duracao"])
+        nome = self.nomes.get(a["video"]) or {}
+        return {"video": a["video"], "titulo": nome.get("titulo"), "canal": nome.get("canal"),
+                "miniatura": f"https://i.ytimg.com/vi/{a['video']}/mqdefault.jpg",
+                "posicao": round(posicao, 1) if posicao is not None else None,
+                "duracao": a.get("duracao"), "estado": a["estado"]}
+
+    async def _rodar(self):
+        espera = 2
+        while True:
+            try:
+                await self._sessao_do_lounge()
+                espera = 2
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                log.info("YouTube (tocando agora): %s", sem_segredo(repr(e)))
+            await asyncio.sleep(espera)
+            espera = min(espera * 2, 30)
+
+    async def _sessao_do_lounge(self):
+        tela = await self.tela_do_youtube()
+        if not tela:
+            return
+        async with self.sessao.post(f"{Lounge.API}/pairing/get_lounge_token_batch", data={"screen_ids": tela},
+                                    timeout=aiohttp.ClientTimeout(total=10)) as r:
+            telas = (await r.json(content_type=None)).get("screens") or []
+        if not telas:
+            return
+        token = telas[0]["loungeToken"]
+        corpo = {
+            "app": "web", "mdx-version": "3", "name": NOME_CLIENTE, "id": tela, "device": "REMOTE_CONTROL",
+            "capabilities": "que,dsdtr,atp,vsp", "magnaKey": "cloudPairedDevice", "ui": "false",
+            "theme": "cl", "loungeIdToken": token,
+        }
+        async with self.sessao.post(f"{Lounge.API}/bc/bind?RID=1&VER=8&CVER=1&auth_failure_option=send_error",
+                                    data=corpo, timeout=aiohttp.ClientTimeout(total=10)) as r:
+            if r.status != 200:
+                return
+            texto = await r.text()
+        sid = sessao_g = None
+        ultimo = 0
+        for numero, tipo, args in eventos_do_lounge(texto):
+            ultimo = numero
+            if tipo == "c":
+                sid = args[0]
+            elif tipo == "S":
+                sessao_g = args[0]
+            else:
+                await self._evento(tipo, args)
+        if not sid:
+            return
+        base = {"name": NOME_CLIENTE, "loungeIdToken": token, "SID": sid, "gsessionid": sessao_g,
+                "device": "REMOTE_CONTROL", "app": "youtube-desktop", "VER": "8", "v": "2"}
+        # Pede o que está tocando agora (a TV responde com "nowPlaying" no canal de escuta).
+        async with self.sessao.post(f"{Lounge.API}/bc/bind", params={**base, "RID": "2", "AID": str(ultimo)},
+                                    data={"count": "1", "ofs": "0", "req0__sc": "getNowPlaying"},
+                                    timeout=aiohttp.ClientTimeout(total=10)):
+            pass
+        # Escuta: cada GET fica aberto até o YouTube mandar algo (ou uns minutos); depois abre outro.
+        while True:
+            params = {**base, "RID": "rpc", "CI": "0", "TYPE": "xmlhttp", "AID": str(ultimo), "t": "1"}
+            async with self.sessao.get(f"{Lounge.API}/bc/bind", params=params,
+                                       timeout=aiohttp.ClientTimeout(total=None, sock_read=330)) as r:
+                if r.status != 200:
+                    return  # sessão vencida: o laço de fora abre outra
+                pedaco = ""
+                async for bruto in r.content:
+                    pedaco += bruto.decode(errors="ignore")
+                    achados = eventos_do_lounge(pedaco)
+                    if not achados:
+                        continue
+                    pedaco = ""
+                    for numero, tipo, args in achados:
+                        ultimo = numero
+                        if tipo == "noop":
+                            continue
+                        await self._evento(tipo, args)
+
+    async def _evento(self, tipo, args):
+        dados = args[0] if args and isinstance(args[0], dict) else {}
+        if tipo == "nowPlaying":
+            video = dados.get("videoId")
+            if not video:
+                self.agora = None
+                return
+            self._marcar(video, dados)
+            if video not in self.nomes:
+                await self._buscar_nome(video)
+        elif tipo == "onStateChange" and self.agora:
+            self._marcar(self.agora["video"], dados)
+        elif tipo == "onVideoChanged" and dados.get("videoId"):
+            self._marcar(dados["videoId"], dados)
+            if dados["videoId"] not in self.nomes:
+                await self._buscar_nome(dados["videoId"])
+
+    def _marcar(self, video, dados):
+        def numero(chave):
+            try:
+                v = float(dados.get(chave))
+                return v if v >= 0 else None
+            except (TypeError, ValueError):
+                return None
+        antes = self.agora if self.agora and self.agora.get("video") == video else {}
+        estado = ESTADOS_YT.get(str(dados.get("state")), antes.get("estado") or "carregando")
+        posicao = numero("currentTime")
+        self.agora = {"video": video, "estado": estado, "em": time.time(),
+                      "posicao": posicao if posicao is not None else (self.resumo() or {}).get("posicao"),
+                      "duracao": numero("duration") or antes.get("duracao")}
+
+    async def _buscar_nome(self, video):
+        """Título e canal pelo oEmbed do YouTube (público, sem chave)."""
+        self.nomes[video] = {}
+        try:
+            async with self.sessao.get("https://www.youtube.com/oembed",
+                                       params={"url": f"https://www.youtube.com/watch?v={video}", "format": "json"},
+                                       timeout=aiohttp.ClientTimeout(total=6)) as r:
+                if r.status == 200:
+                    d = await r.json(content_type=None)
+                    self.nomes[video] = {"titulo": d.get("title"), "canal": d.get("author_name")}
+                    return
+        except (aiohttp.ClientError, asyncio.TimeoutError, OSError, ValueError):
+            pass
+        # Vídeo com incorporação bloqueada (o oEmbed dá 401): pelo yt-dlp, o mesmo da busca (~2 s).
+        try:
+            info = await asyncio.wait_for(asyncio.get_running_loop().run_in_executor(None, _info_do_video, video), 15)
+            self.nomes[video] = {"titulo": info.get("title"), "canal": info.get("channel") or info.get("uploader")}
+        except Exception as e:
+            log.info("título do vídeo: %s", sem_segredo(repr(e)))
+
+
+def _info_do_video(video):
+    import yt_dlp  # só aqui: a ponte e o teste do driver não precisam dele
+    with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "skip_download": True}) as ydl:
+        return ydl.extract_info(f"https://www.youtube.com/watch?v={video}", download=False, process=False) or {}
+
+
 # MARK: a TV
 
 
@@ -359,6 +544,7 @@ class TVSamsung:
         self.som_mudado_em = 0.0     # a TV demora a contar o volume novo: até lá vale o que mandamos
         self.tarefas = set()
         self.lounge = Lounge()
+        self.ouvinte = None          # o que o YouTube da TV está tocando (só enquanto ele está na tela)
 
     # MARK: básico
 
@@ -380,6 +566,7 @@ class TVSamsung:
         return t
 
     async def descartar(self):
+        self._parar_de_ouvir()
         for t in list(self.tarefas) + [self.vigia, self.leitor]:
             if t is not None and not t.done():
                 t.cancel()
@@ -511,7 +698,10 @@ class TVSamsung:
                 await asyncio.wait_for(self.lida.wait(), 4)
             except asyncio.TimeoutError:
                 pass
-        return self.foto or self._desligada()
+        foto = self.foto or self._desligada()
+        if foto.get("tocando") and self.ouvinte is not None:  # a posição de agora, não a da última leitura
+            foto = {**foto, "tocando": self.ouvinte.resumo()}
+        return foto
 
     def _desligada(self):
         return {"online": False, "pareado": self.pareado(), "marca": self.marca,
@@ -533,6 +723,21 @@ class TVSamsung:
                 await asyncio.wait_for(self.acordar.wait(), 2 if ligada else 3)
             except asyncio.TimeoutError:
                 pass
+        self._parar_de_ouvir()  # ninguém olhando o painel há 30 s
+
+    def _ouvir_youtube(self):
+        """Com o YouTube na tela, escuta o que ele toca; saiu dele, para."""
+        if self.visivel == YOUTUBE and self.ip:
+            if self.ouvinte is None or not self.ouvinte.rodando():
+                dial = f"http://{self.ip}:8080/ws/apps/YouTube"
+                self.ouvinte = OuvinteYouTube(self.sessao(), lambda: self._tela_do_youtube(dial))
+        else:
+            self._parar_de_ouvir()
+
+    def _parar_de_ouvir(self):
+        if self.ouvinte is not None:
+            self.ouvinte.parar()
+            self.ouvinte = None
 
     async def _ler(self):
         if not self.pareado():
@@ -543,11 +748,13 @@ class TVSamsung:
         _ip, info = await self.info(procurar=procurar)
         if energia(info) != "on":
             self.visivel = self.entrada = None
+            self._parar_de_ouvir()
             return self._desligada()
         self.ligando_ate = 0.0
         if not await self._ler_estado_ip():
             await self._ler_volume()
         await self._ler_app()
+        self._ouvir_youtube()
         s = self.salva()
         # A cada 12 h, e logo depois de o catálogo ganhar um app novo (numa atualização do Controle da TV).
         if time.time() - float(s.get("apps_em") or 0) > 12 * 3600 or s.get("apps_catalogo") != len(POR_ID):
@@ -577,6 +784,7 @@ class TVSamsung:
             "app_atual": atual, "app_titulo": titulo, "ao_vivo": bool(s.get("chave_ip")),
             "volume": self.volume, "mudo": bool(self.mudo), "som": None, "canal": None, "canal_nome": None,
             "entradas": entradas, "apps": apps,
+            "tocando": self.ouvinte.resumo() if self.ouvinte and atual == YOUTUBE else None,
         }
 
     async def _ip(self, metodo, **params):

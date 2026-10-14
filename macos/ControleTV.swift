@@ -34,6 +34,25 @@ struct TVNaCasa: Decodable, Equatable, Identifiable {
     var ligada: Bool?
     var escolhida: Bool?
 }
+/// O que o YouTube da TV está tocando (por enquanto só na Samsung). A posição vem acertada para a hora da resposta.
+struct TocandoYT: Decodable, Equatable {
+    let video: String
+    var titulo: String?
+    var canal: String?
+    var miniatura: String?
+    var posicao: Double?
+    var duracao: Double?
+    var estado: String?   // "tocando", "pausado", "carregando", "terminou"
+
+    /// Posição neste instante: a que veio do servidor mais o tempo desde que chegou, se estiver tocando.
+    func posicao(em agora: Date, recebido: Date) -> Double? {
+        guard var p = posicao else { return nil }
+        if estado == "tocando" { p += agora.timeIntervalSince(recebido) }
+        if let duracao { p = min(p, duracao) }
+        return p
+    }
+}
+
 struct EstadoTV: Decodable, Equatable {
     let online: Bool
     var pareado: Bool?
@@ -49,6 +68,7 @@ struct EstadoTV: Decodable, Equatable {
     var nome: String?
     var ao_vivo: Bool?    // a TV aceita "TV ao vivo" pela rede (na Samsung, só com o Controle Remoto IP)
     var console: ConsoleTV?
+    var tocando: TocandoYT?
     var tvs: [TVNaCasa]?  // duas ou mais TVs nesta casa: o painel mostra o seletor
     var tv_titulo: String?
     var limitada: Bool?   // Roku com "Controle por aplicativos móveis" em Limitado: lê, mas não aceita comando
@@ -65,6 +85,7 @@ final class Controle: ObservableObject {
     @Published var iconeVisivel = false
     @Published var configCompleta = false
     @Published var estado: EstadoTV?
+    var estadoEm = Date()  // quando o estado chegou: o "tocando agora" conta o tempo a partir daqui
     @Published var enviando = 0  // ações a caminho da TV (o rodapé mostra "Enviando…")
     @Published var pendencias: [Passo] = []  // o que falta liberar: o painel mostra "Corrigir"
     @Published var preparandoMotor = false   // componentes sendo atualizados depois de uma atualização
@@ -322,7 +343,7 @@ final class Controle: ObservableObject {
         if let (dados, _) = try? await URLSession.shared.data(for: req),
            let e = try? JSONDecoder().decode(EstadoTV.self, from: dados) {
             falhas = 0
-            if estado != e { estado = e }  // só redesenha quando algo mudou
+            if estado != e { estadoEm = Date(); estado = e }  // só redesenha quando algo mudou
         } else {
             falhas += 1
             if falhas >= 2 && estado != nil { estado = nil }  // servidor subindo ou fora do ar; uma falha isolada não pisca o painel

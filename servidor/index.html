@@ -151,6 +151,15 @@ input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border-radius: 
 .liberar .caminho { font-weight: 650; }
 .liberar .nota { color: var(--muted); font-size: 13px; margin: 0; }
 body.limitada .controle, body.limitada #power, body.limitada #ligar { opacity: .35; pointer-events: none; }
+/* tocando agora no YouTube da TV */
+.tocando { display: grid; grid-template-columns: 128px 1fr; gap: 14px; align-items: center; }
+.tocando[hidden] { display: none; }
+.tocando img { width: 128px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 10px; background: var(--surface-3); }
+.tocando .t-titulo { font-weight: 650; font-size: 15px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tocando .t-canal { color: var(--muted); font-size: 13px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tocando .t-barra { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--surface-3); overflow: hidden; }
+.tocando .t-barra span { display: block; height: 100%; width: 0; background: var(--off); }
+.tocando .t-tempo { grid-column: 1 / -1; display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; margin-top: -8px; }
 /* entradas */
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip {
@@ -274,6 +283,15 @@ details[open] > summary svg { transform: rotate(180deg); }
       <p class="caminho" id="liberar-caminho"></p>
       <p class="nota">Enquanto isso, nada daqui aparece na tela dela.</p>
     </div>
+    <div class="card tocando" id="tocando" hidden>
+      <img id="t-img" alt="">
+      <div style="min-width:0">
+        <div class="t-titulo" id="t-titulo"></div>
+        <div class="t-canal" id="t-canal"></div>
+      </div>
+      <div class="t-barra"><span id="t-barra"></span></div>
+      <div class="t-tempo"><span id="t-pos"></span><span id="t-estado"></span><span id="t-dur"></span></div>
+    </div>
     <div class="card aviso-off">
       <p id="msg-off">A TV está desligada.</p>
       <button class="btn-ligar" id="ligar"><svg><use href="#i-power"/></svg>Ligar a TV</button>
@@ -381,6 +399,18 @@ const IDIOMA = (() => {
   return "en";
 })();
 const TXT = {
+"Pausado": [
+"Paused",
+"En pausa"
+],
+"Carregando…": [
+"Loading…",
+"Cargando…"
+],
+"Terminou": [
+"Ended",
+"Terminó"
+],
 "Qual é esta TV?": [
 "Which TV is this?",
 "¿Cuál es esta TV?"
@@ -810,7 +840,43 @@ $("#tv-renomear").addEventListener("click", async () => {
   if (nome !== null && await postarTv({ id: atual.id, nome })) carregar();
 });
 
+// ---- tocando agora no YouTube da TV: a posição chega acertada e aqui só continua contando ----
+let tocando = null;
+const relogio = (s) => {
+  if (s == null) return "";
+  s = Math.max(0, Math.floor(s));
+  const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, seg = String(s % 60).padStart(2, "0");
+  return h ? `${h}:${String(m).padStart(2, "0")}:${seg}` : `${m}:${seg}`;
+};
+function renderTocando() {
+  const t = estado && estado.online && estado.tocando;
+  $("#tocando").hidden = !t;
+  if (!t) { tocando = null; return; }
+  if (!tocando || tocando.video !== t.video) {
+    $("#t-img").src = t.miniatura;
+    $("#t-titulo").textContent = t.titulo || "YouTube";
+    $("#t-canal").textContent = t.canal || "";
+  } else if (t.titulo && $("#t-titulo").textContent !== t.titulo) {
+    $("#t-titulo").textContent = t.titulo;
+    $("#t-canal").textContent = t.canal || "";
+  }
+  tocando = { ...t, recebido: Date.now() };
+  andarTocando();
+}
+function andarTocando() {
+  if (!tocando) return;
+  let pos = tocando.posicao;
+  if (pos != null && tocando.estado === "tocando") pos += (Date.now() - tocando.recebido) / 1000;
+  if (pos != null && tocando.duracao) pos = Math.min(pos, tocando.duracao);
+  $("#t-pos").textContent = relogio(pos);
+  $("#t-dur").textContent = relogio(tocando.duracao);
+  $("#t-estado").textContent = tr({ pausado: "Pausado", carregando: "Carregando…", terminou: "Terminou" }[tocando.estado] || "");
+  $("#t-barra").style.width = pos != null && tocando.duracao ? (100 * pos / tocando.duracao).toFixed(2) + "%" : "0";
+}
+setInterval(andarTocando, 1000);
+
 function render() {
+  renderTocando();
   renderTvs();
   const online = estado && estado.online;
   document.body.classList.toggle("offline", !online);

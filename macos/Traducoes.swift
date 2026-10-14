@@ -204,4 +204,5 @@ let traducoes: [String: (en: String, es: String)] = [
     "Salvar": ("Save", "Guardar"),
     "Uma vez só, com o controle da TV, num momento em que ninguém esteja assistindo:": ("Just once, with the TV remote, when nobody is watching:", "Una sola vez, con el control de la TV, cuando nadie esté mirando:"),
     "Configurações › Sistema › Configurações avançadas do sistema › Controle por aplicativos móveis › Acesso à rede › Ativado": ("Settings › System › Advanced system settings › Control by mobile apps › Network access › Enabled", "Configuración › Sistema › Configuración avanzada del sistema › Control por aplicaciones móviles › Acceso a la red › Habilitado"),
+    "Pausado": ("Paused", "En pausa"),
 ]
