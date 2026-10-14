@@ -1,4 +1,5 @@
-// Atualização automática: confere <site>/versao.json ao abrir e a cada 6 h.
+// Atualização automática: confere <site>/versao.json ao abrir, a cada 5 min e quando o Mac acorda. Versão nova é
+// instalada assim que baixa e confere, sem perguntar: só espera o painel e o assistente fecharem (e 2 min sem uso).
 // Só instala o que passar em três conferências: assinatura Ed25519 do manifesto (a chave privada fica só
 // no Mac de quem publica), sha256 do zip e assinatura de código igual à do app que está rodando.
 import AppKit
@@ -51,13 +52,16 @@ final class Atualizador: ObservableObject {
 
     /// Sem site ou sem chave no Info.plist (ex.: quem compila para si), o app não procura atualização.
     static var manifestoURL: URL? { Ajustes.site.flatMap { URL(string: $0 + "/versao.json") } }
-    private static let intervalo: Double = 6 * 3600
+    /// É o "push": o versao.json tem menos de 1 KB e é um arquivo estático na Cloudflare, então conferir sempre não pesa.
+    private static let intervalo: Double = 5 * 60
 
     private var novoApp: URL?
     private var pastaTemporaria: URL?
     private var manifestoPronto: Manifesto?
     private var laco: Task<Void, Never>?
     private var verificando = false
+    private var acordou: NSObjectProtocol?
+    private var ultimoEmDia: Int?  // build do servidor da última conferência "em dia": não repete no log a cada 5 min
 
     func iniciar() {
         guard Atualizador.manifestoURL != nil, Ajustes.chavePublica != nil else {
@@ -65,11 +69,23 @@ final class Atualizador: ObservableObject {
             return
         }
         laco?.cancel()
+        // Mac que dormiu (tampa fechada) acorda com versão nova esperando: confere assim que a rede volta.
+        if acordou == nil {
+            acordou = NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(30))
+                    await self?.verificar()
+                }
+            }
+        }
         laco = Task { [weak self] in
             try? await Task.sleep(for: .seconds(20))
             while !Task.isCancelled {
                 await self?.verificar()
                 // Com uma versão pronta, tenta instalar a cada minuto (quando ninguém está usando o painel).
+                // Sem versão nova, a próxima conferência é daqui a 5 min.
                 var espera = Atualizador.intervalo
                 while espera > 0, !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(60))
@@ -89,7 +105,10 @@ final class Atualizador: ObservableObject {
             let m = try await buscarManifesto()
             guard m.build > Versao.build else {
                 if manual || situacao == .emDia { situacao = .emDia }
-                registrar("atualização: em dia (servidor \(m.versao) build \(m.build), aqui \(Versao.texto) build \(Versao.build))")
+                if manual || ultimoEmDia != m.build {
+                    registrar("atualização: em dia (servidor \(m.versao) build \(m.build), aqui \(Versao.texto) build \(Versao.build))")
+                }
+                ultimoEmDia = m.build
                 return
             }
             if manifestoPronto == m, novoApp != nil { tentarInstalarSozinho(); return }
