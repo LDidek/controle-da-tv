@@ -59,7 +59,7 @@ button:disabled { cursor: default; }
 svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 
 header {
-  position: sticky; top: 0; z-index: 5;
+  position: sticky; /* o menu de TVs abre embaixo do nome */ top: 0; z-index: 5;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 14px 16px; background: var(--bg);
   border-bottom: 1px solid var(--line);
@@ -139,13 +139,25 @@ input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border-radius: 
 .canal button { height: 44px; border-radius: 14px; background: var(--surface-2); display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 14px; }
 .canal span { color: var(--muted); font-size: 13px; min-width: 64px; text-align: center; }
 
-/* várias TVs na casa: o seletor só aparece com duas ou mais */
-.tvs { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-.tvs[hidden] { display: none; }
-.tvs .chips { flex: 1 1 240px; min-width: 0; }
-.tvs .chip { white-space: nowrap; }
-.tvs .chip .mini.off { background: var(--muted); }
-.tvs-acoes { display: flex; gap: 8px; }
+/* várias TVs na casa: o nome no topo vira o menu (só com duas ou mais) */
+.status.menu { cursor: pointer; border-radius: 12px; margin: -6px -8px; padding: 6px 8px; }
+.status.menu:active { background: var(--surface-2); }
+.titulo-linha { display: flex; align-items: center; gap: 6px; }
+.titulo-linha svg { width: 16px; height: 16px; color: var(--muted); }
+.tvs-menu {
+  position: absolute; top: calc(100% - 6px); left: 12px; z-index: 20; min-width: 248px; padding: 6px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .35); display: grid; gap: 2px;
+}
+.tvs-menu[hidden] { display: none; }
+.tvs-menu button { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border-radius: 9px; text-align: left; font-size: 15px; }
+.tvs-menu button:active, .tvs-menu button:hover { background: var(--surface-2); }
+.tvs-menu .marca { width: 16px; color: var(--accent); font-weight: 700; }
+.tvs-menu .mini { width: 8px; height: 8px; border-radius: 50%; background: var(--on); flex: none; }
+.tvs-menu .mini.off { background: var(--muted); }
+.tvs-menu .estado-tv { margin-left: auto; color: var(--muted); font-size: 13px; }
+.tvs-menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 6px; }
+.tvs-menu .acao { color: var(--muted); padding-left: 38px; }
 .liberar { border-color: var(--accent); }
 .liberar p { margin: 0 0 8px; }
 .liberar .caminho { font-weight: 650; }
@@ -261,19 +273,13 @@ details[open] > summary svg { transform: rotate(180deg); }
   <div class="status">
     <span class="dot" id="dot"></span>
     <div style="min-width:0">
-      <div class="titulo" id="titulo">TV</div>
+      <div class="titulo-linha"><div class="titulo" id="titulo">TV</div><svg id="titulo-seta" hidden><use href="#i-chev"/></svg></div>
       <div class="sub" id="sub">Conectando…</div>
     </div>
   </div>
   <button class="power" id="power" aria-label="Ligar ou desligar"><svg><use href="#i-power"/></svg></button>
+  <div class="tvs-menu" id="tvs" role="menu" hidden aria-label="TVs da casa"></div>
 </header>
-<nav class="tvs" id="tvs" hidden aria-label="TVs da casa">
-  <div class="chips" id="tvs-lista"></div>
-  <div class="tvs-acoes">
-    <button class="pilula" id="tv-identificar"><svg><use href="#i-som"/></svg>Qual é esta TV?</button>
-    <button class="pilula" id="tv-renomear">Renomear</button>
-  </div>
-</nav>
 
 
 <main>
@@ -795,23 +801,54 @@ function renderEntradas() {
 let chaveTvs = "";
 function renderTvs() {
   const lista = (estado && estado.tvs) || [];
-  $("#tvs").hidden = lista.length < 2;
-  const chave = JSON.stringify(lista);
+  const varias = lista.length > 1;
+  $("#titulo-seta").hidden = !varias;
+  $(".status").classList.toggle("menu", varias);
+  if (!varias) { $("#tvs").hidden = true; chaveTvs = ""; return; }
+  const chave = JSON.stringify(lista) + (estado.online ? "1" : "0");
   if (chave === chaveTvs) return;
   chaveTvs = chave;
-  const box = $("#tvs-lista");
-  box.replaceChildren();
+  const menu = $("#tvs");
+  menu.replaceChildren();
   for (const t of lista) {
     const b = document.createElement("button");
-    b.className = "chip" + (t.escolhida ? " atual" : "");
-    const m = document.createElement("span");
-    m.className = "mini" + (t.ligada ? "" : " off");
-    b.append(m, t.nome);
-    b.title = tr(t.ligada ? "Ligada" : "Desligada");
-    b.addEventListener("click", () => { if (!t.escolhida) escolherTv(t); });
-    box.appendChild(b);
+    b.setAttribute("role", "menuitemradio");
+    b.setAttribute("aria-checked", t.escolhida ? "true" : "false");
+    const marca = document.createElement("span"); marca.className = "marca"; marca.textContent = t.escolhida ? "✓" : "";
+    const m = document.createElement("span"); m.className = "mini" + (t.ligada ? "" : " off");
+    const nome = document.createElement("span"); nome.textContent = t.nome;
+    const st = document.createElement("span"); st.className = "estado-tv"; st.textContent = tr(t.ligada ? "Ligada" : "Desligada");
+    b.append(marca, m, nome, st);
+    b.addEventListener("click", () => { fecharMenuTvs(); if (!t.escolhida) escolherTv(t); });
+    menu.appendChild(b);
+  }
+  menu.appendChild(document.createElement("hr"));
+  for (const [texto, fazer, ativo] of [
+    ["Qual é esta TV?", identificarTv, estado.online && !estado.limitada],
+    ["Renomear", renomearTv, true],
+  ]) {
+    const b = document.createElement("button");
+    b.className = "acao";
+    b.setAttribute("role", "menuitem");
+    b.textContent = tr(texto);
+    b.disabled = !ativo;
+    if (!ativo) b.style.opacity = ".45";
+    b.addEventListener("click", () => { fecharMenuTvs(); fazer(); });
+    menu.appendChild(b);
   }
 }
+
+function fecharMenuTvs() { $("#tvs").hidden = true; }
+$(".status").addEventListener("click", (ev) => {
+  if (!$(".status").classList.contains("menu")) return;
+  ev.stopPropagation();
+  $("#tvs").hidden = !$("#tvs").hidden;
+});
+document.addEventListener("click", (ev) => { if (!$("#tvs").contains(ev.target)) fecharMenuTvs(); });
+document.addEventListener("keydown", (ev) => {
+  // Com o menu aberto, Esc só fecha o menu (sem ele, Esc é "Voltar" na TV).
+  if (ev.key === "Escape" && !$("#tvs").hidden) { fecharMenuTvs(); ev.stopImmediatePropagation(); }
+});
 
 async function postarTv(corpo) {
   try {
@@ -838,16 +875,16 @@ async function escolherTv(t) {
   }
 }
 
-$("#tv-identificar").addEventListener("click", () => {
+function identificarTv() {
   toast(tr("Ouça: o som desta TV some por 2 segundos"));
   enviar("identificar");
-});
-$("#tv-renomear").addEventListener("click", async () => {
+}
+async function renomearTv() {
   const atual = ((estado && estado.tvs) || []).find((t) => t.escolhida);
   if (!atual) return;
   const nome = prompt(tr("Nome desta TV (ex.: Sala, Quarto)"), atual.nome);
   if (nome !== null && await postarTv({ id: atual.id, nome })) carregar();
-});
+}
 
 // ---- tocando agora no YouTube da TV: a posição chega acertada e aqui só continua contando ----
 let tocando = null;

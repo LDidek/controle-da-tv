@@ -119,7 +119,6 @@ struct PainelTV: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             cabecalho
-            if let tvs = e?.tvs, tvs.count > 1 { seletorDeTVs(tvs) }
             // A janela da barra não cresce direito depois de aberta: a seção escolhida (apps,
             // entradas, setas) ocupa o lugar da ilustração e o painel mantém sempre o mesmo tamanho.
             Group {
@@ -182,9 +181,10 @@ struct PainelTV: View {
     private var cabecalho: some View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 7) {
-                    Image(systemName: "tv").foregroundStyle(apagado)
-                    Text(e?.titulo ?? "TV LG").font(.system(size: 16, weight: .semibold)).lineLimit(1)
+                if let tvs = e?.tvs, tvs.count > 1 {
+                    menuDeTVs(tvs)
+                } else {
+                    nomeDaTV(seta: false)
                 }
                 Text(subtitulo)
                     .font(.system(size: 12.5))
@@ -321,53 +321,46 @@ struct PainelTV: View {
 
     // MARK: várias TVs na casa
 
-    /// Só com duas TVs ou mais: um toque troca a TV controlada; o botão direito acha, renomeia ou esquece.
-    private func seletorDeTVs(_ tvs: [TVNaCasa]) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(tvs) { tv in
-                    let ativa = tv.escolhida == true
-                    Button {
-                        if !ativa { ui.secao = nil; c.tv(["id": tv.id]) }
-                    } label: {
-                        HStack(spacing: 6) {
-                            Circle().fill(tv.ligada == true ? Color.green.opacity(0.85) : apagado.opacity(0.6))
-                                .frame(width: 6, height: 6)
-                            Text(tv.nome).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                        }
-                        .foregroundStyle(ativa ? destaque : Color(white: 0.9))
-                        .padding(.horizontal, 12)
-                        .frame(height: 30)
-                        .background(Capsule().fill(ativa ? blocoAtivo : bloco))
-                        .overlay(Capsule().stroke(ativa ? destaque.opacity(0.6) : borda))
-                    }
-                    .buttonStyle(.plain)
-                    .help(ativa ? T("Esta é a TV que o controle está usando") : T("Controlar a TV %@", tv.nome))
-                    .contextMenu {
-                        if ativa {
-                            Button(T("Qual é esta TV?")) { c.acao("identificar") }
-                        } else {
-                            Button(T("Controlar esta TV")) { c.tv(["id": tv.id]) }
-                        }
-                        Button(T("Renomear…")) { c.renomearTV(tv) }
-                        Divider()
-                        Button(T("Esquecer esta TV")) { c.tv(["id": tv.id, "esquecer": true]) }
-                    }
-                }
-                Button { c.acao("identificar") } label: {
-                    Image(systemName: "speaker.wave.2")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Color(white: 0.85))
-                        .frame(width: 30, height: 30)
-                        .background(Circle().fill(bloco))
-                        .overlay(Circle().stroke(borda))
-                }
-                .buttonStyle(.plain)
-                .disabled(!ligada || travada)
-                .opacity(ligada && !travada ? 1 : 0.4)
-                .help(T("Qual é esta TV? O som dela some por 2 segundos"))
+    private func nomeDaTV(seta: Bool) -> some View {
+        HStack(spacing: 7) {
+            Image(systemName: "tv").foregroundStyle(apagado)
+            Text(e?.titulo ?? "TV LG").font(.system(size: 16, weight: .semibold)).lineLimit(1)
+            if seta {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(apagado)
             }
         }
+        .contentShape(Rectangle())
+    }
+
+    /// Com duas TVs ou mais, o nome no topo vira o menu (como o Controle Remoto da Apple TV e o app da Sonos):
+    /// a lista com a escolhida marcada e, embaixo, achar, renomear, esquecer e conectar outra.
+    private func menuDeTVs(_ tvs: [TVNaCasa]) -> some View {
+        Menu {
+            ForEach(tvs) { tv in
+                Toggle(isOn: Binding(get: { tv.escolhida == true },
+                                     set: { if $0 && tv.escolhida != true { ui.secao = nil; c.tv(["id": tv.id]) } })) {
+                    Text(tv.ligada == false ? T("%@ (desligada)", tv.nome) : tv.nome)
+                }
+            }
+            Divider()
+            Button(T("Qual é esta TV?")) { c.acao("identificar") }
+                .disabled(!ligada || travada)
+            if let atual = tvs.first(where: { $0.escolhida == true }) {
+                Button(T("Renomear…")) { c.renomearTV(atual) }
+                Button(T("Esquecer esta TV")) { c.tv(["id": atual.id, "esquecer": true]) }
+            }
+            Divider()
+            Button(T("Conectar outra TV desta casa…")) { c.assistente.abrir(em: .tv, novaTV: true, mesmaCasa: true) }
+        } label: {
+            nomeDaTV(seta: true)
+        }
+        .menuStyle(.button)       // .borderlessButton só desenha o primeiro ícone e o texto: a seta sumia
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(T("Escolher a TV"))
     }
 
     /// Roku em "Limitado": o caminho no menu da TV, para fazer uma vez com o controle físico.
