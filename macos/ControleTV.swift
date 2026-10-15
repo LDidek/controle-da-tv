@@ -375,6 +375,12 @@ final class Controle: ObservableObject {
     /// Passa a controlar outra TV da casa ("id"), renomeia ("nome", vazio volta ao nome dela) ou esquece ("esquecer").
     func tv(_ corpo: [String: Any]) {
         ultimaInteracao = Date()
+        // Trocar de TV: o seletor e o título mudam no clique; o resto chega logo em seguida.
+        if corpo.count == 1, let id = corpo["id"] as? String, var e = estado, let tvs = e.tvs {
+            e.tvs = tvs.map { var x = $0; x.escolhida = x.id == id; return x }
+            e.tv_titulo = tvs.first { $0.id == id }?.nome ?? e.tv_titulo
+            estado = e
+        }
         Task {
             var req = URLRequest(url: URL(string: "http://127.0.0.1:\(porta)/api/tv")!)
             req.httpMethod = "POST"

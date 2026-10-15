@@ -479,24 +479,34 @@ class Gerente:
     def __init__(self):
         self.atual = None
         self.chave = None
+        # Cada TV da casa fica com a conexão aberta e a última leitura guardada: trocar de TV não recomeça do zero.
+        self.guardadas = {}
+
+    def guardar(self, t):
+        """A conexão desta TV (cria na primeira vez). Não muda qual TV o controle está usando."""
+        roteador, quem = t.get("roteador"), ident(t)
+        chave = (t.get("marca", "lg"), str(roteador), quem)
+        if chave not in self.guardadas:
+            classe = {"samsung": samsung.TVSamsung, "roku": roku.TVRoku}.get(chave[0], TVLG)
+            self.guardadas[chave] = classe(lambda: tv_por_ident(roteador, quem),
+                                           lambda novos: atualizar_tv(roteador, novos, quem))
+        return chave, self.guardadas[chave]
 
     def tv(self):
         t = tv_salva()
         if t is None:
             return None
-        roteador, quem = t.get("roteador"), ident(t)
-        chave = (t.get("marca", "lg"), str(roteador), quem)
+        chave, guardada = self.guardar(t)
         if self.atual is None or chave != self.chave:
-            if self.atual is not None:
+            if self.atual is not None and self.atual not in self.guardadas.values():
                 asyncio.create_task(self.atual.descartar())
-            classe = {"samsung": samsung.TVSamsung, "roku": roku.TVRoku}.get(chave[0], TVLG)
-            self.atual = classe(lambda: tv_por_ident(roteador, quem), lambda novos: atualizar_tv(roteador, novos, quem))
-            self.chave = chave
+            self.atual, self.chave = guardada, chave
         return self.atual
 
     async def descartar(self):
-        if self.atual is not None:
-            await self.atual.descartar()
+        for tv in {id(x): x for x in [self.atual, *self.guardadas.values()] if x is not None}.values():
+            await tv.descartar()
+        self.guardadas.clear()
         self.atual = self.chave = None
 
 
@@ -784,6 +794,21 @@ def resumo(cliente):
 vistas = {}  # outras TVs da casa: {ident: {"ligada": bool | None, "em": quando foi conferida}}
 
 
+async def ligada_agora(t):
+    """Pela conexão guardada da TV (a mesma fila de pedidos: a Samsung engasga com pedidos em paralelo).
+    A Samsung nunca lida é lida uma vez inteira agora: assim a primeira troca para ela já sai na hora."""
+    _chave, tv = gerente.guardar(t)
+    if isinstance(tv, samsung.TVSamsung):
+        if tv.foto is None:
+            return bool((await tv.estado()).get("online"))
+        _ip, info = await tv.info()
+        return samsung.energia(info) == "on"
+    if isinstance(tv, roku.TVRoku):
+        _ip, info = await tv.info()
+        return roku.energia(info) == "on"
+    return await ver_tv(t)
+
+
 async def ver_tv(t):
     """Se a TV está ligada, só lendo (nada aparece na tela)."""
     ip, marca = t.get("tv_ip"), t.get("marca", "lg")
@@ -816,7 +841,7 @@ def lista_de_tvs(escolhida, online):
 
                 async def conferir(quem=quem, t=t):
                     try:
-                        vistas[quem]["ligada"] = await ver_tv(t)
+                        vistas[quem]["ligada"] = await ligada_agora(t)
                     except Exception:
                         vistas[quem]["ligada"] = None
                 asyncio.create_task(conferir())
@@ -969,8 +994,13 @@ async def youtube_busca(req):
 async def icone(req):
     app_id = req.match_info["app_id"]
     if app_id not in icones:
+        # Primeiro a TV escolhida; logo depois de uma troca o pedido pode ser de um app da outra TV da casa.
         tv = gerente.tv()
-        imagem = await tv.icone(app_id) if tv is not None else None
+        imagem = None
+        for candidata in ([tv] if tv is not None else []) + [x for x in gerente.guardadas.values() if x is not tv]:
+            imagem = await candidata.icone(app_id)
+            if imagem:
+                break
         if not imagem:
             raise web.HTTPNotFound()
         icones[app_id] = imagem

@@ -150,6 +150,7 @@ input[type=range]::-moz-range-thumb { width: 22px; height: 22px; border-radius: 
 .liberar p { margin: 0 0 8px; }
 .liberar .caminho { font-weight: 650; }
 .liberar .nota { color: var(--muted); font-size: 13px; margin: 0; }
+body.trocando main { opacity: .55; transition: opacity .12s; }
 body.limitada .controle, body.limitada #power, body.limitada #ligar { opacity: .35; pointer-events: none; }
 /* tocando agora no YouTube da TV */
 .tocando { display: grid; grid-template-columns: 128px 1fr; gap: 14px; align-items: center; }
@@ -825,8 +826,16 @@ async function postarTv(corpo) {
 }
 
 async function escolherTv(t) {
-  toast(t.nome);
-  if (await postarTv({ id: t.id })) carregar();
+  // Na hora: o botão e o título já mudam; o resto da TV nova chega na leitura seguinte.
+  estado = { ...estado, tv_titulo: t.nome, tvs: estado.tvs.map((x) => ({ ...x, escolhida: x.id === t.id })) };
+  renderTvs();
+  $("#titulo").textContent = t.nome;
+  document.body.classList.add("trocando");
+  try {
+    if (await postarTv({ id: t.id })) await carregar();
+  } finally {
+    document.body.classList.remove("trocando");
+  }
 }
 
 $("#tv-identificar").addEventListener("click", () => {
